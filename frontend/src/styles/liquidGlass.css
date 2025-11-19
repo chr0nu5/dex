@@ -1,0 +1,400 @@
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 8px 32px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+}
+
+.liquid-glass-button {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  padding: 20px 50px;
+  font-size: 24px;
+  font-weight: 500;
+  font-family: 'Roboto', sans-serif;
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 8px 32px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.liquid-glass-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s;
+}
+
+.liquid-glass-button:hover::before {
+  left: 100%;
+}
+
+.liquid-glass-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow:
+    0 12px 40px 0 rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+.liquid-glass-button:active {
+  transform: translateY(0);
+  box-shadow:
+    0 4px 16px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+}
+
+.liquid-glass-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.liquid-glass-dropzone {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.liquid-glass-dropzone:hover,
+.liquid-glass-dropzone.drag-over {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 12px 40px 0 rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+.liquid-glass-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 4px 16px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
+  padding: 16px 24px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.liquid-glass-select {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: rgba(255, 255, 255, 0.95);
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  min-width: 200px;
+  height: 48px;
+  box-shadow:
+    0 4px 16px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+
+.liquid-glass-select:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.liquid-glass-select option {
+  background: rgba(30, 30, 50, 0.95);
+  color: white;
+}
+
+.liquid-glass-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: rgba(255, 255, 255, 1);
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  height: 48px;
+  box-shadow:
+    0 4px 16px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.liquid-glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+.liquid-glass-input:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 4px 20px 0 rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
+}
+
+.pokemon-card {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 4px 16px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.pokemon-card:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 24px 0 rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
+  z-index: 10;
+  position: relative;
+}
+
+/* Shiny Card - Golden Liquid Glass */
+.pokemon-card.shiny-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 0, 0.6) 0%,
+    rgba(255, 223, 0, 0.6) 50%,
+    rgba(255, 215, 0, 0.6) 100%
+  );
+  border: 2px solid rgba(255, 215, 0, 0.8);
+  box-shadow:
+    0 8px 40px 0 rgba(255, 215, 0, 0.6),
+    0 0 60px 0 rgba(255, 215, 0, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 0 40px 0 rgba(255, 215, 0, 0.3);
+  animation: shinyPulse 2.5s ease-in-out infinite;
+}
+
+.pokemon-card.shiny-card:hover {
+  border-color: rgba(255, 215, 0, 1);
+  box-shadow:
+    0 12px 50px 0 rgba(255, 215, 0, 0.8),
+    0 0 80px 0 rgba(255, 215, 0, 0.5),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
+    inset 0 0 50px 0 rgba(255, 215, 0, 0.4);
+}
+
+/* Shadow Card - Purple/Dark Liquid Glass */
+.pokemon-card.shadow-card {
+  background: linear-gradient(
+    135deg,
+    rgba(138, 43, 226, 0.6) 0%,
+    rgba(147, 51, 234, 0.6) 50%,
+    rgba(138, 43, 226, 0.6) 100%
+  );
+  border: 3px solid rgba(138, 43, 226, 1);
+  box-shadow:
+    0 10px 50px 0 rgba(138, 43, 226, 0.9),
+    0 0 80px 0 rgba(138, 43, 226, 0.7),
+    0 0 120px 0 rgba(138, 43, 226, 0.5),
+    0 0 160px 0 rgba(138, 43, 226, 0.3),
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 0 60px 0 rgba(138, 43, 226, 0.5);
+  animation: shadowPulse 2s ease-in-out infinite;
+}
+
+.pokemon-card.shadow-card:hover {
+  border-color: rgba(186, 85, 211, 1);
+  box-shadow:
+    0 15px 60px 0 rgba(138, 43, 226, 1),
+    0 0 100px 0 rgba(138, 43, 226, 0.8),
+    0 0 150px 0 rgba(138, 43, 226, 0.6),
+    0 0 200px 0 rgba(138, 43, 226, 0.4),
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.6),
+    inset 0 0 70px 0 rgba(138, 43, 226, 0.6);
+}
+
+/* Purified Card - White/Light Liquid Glass */
+.pokemon-card.purified-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(240, 248, 255, 0.8) 50%,
+    rgba(255, 255, 255, 0.8) 100%
+  );
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 8px 40px 0 rgba(255, 255, 255, 0.6),
+    0 0 60px 0 rgba(255, 255, 255, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 0 40px 0 rgba(255, 255, 255, 0.3);
+  animation: purifiedPulse 2.5s ease-in-out infinite;
+}
+
+.pokemon-card.purified-card:hover {
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow:
+    0 12px 50px 0 rgba(255, 255, 255, 0.8),
+    0 0 80px 0 rgba(255, 255, 255, 0.5),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
+    inset 0 0 50px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Apex Card - Rainbow Liquid Glass */
+.pokemon-card.apex-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 0, 0, 0.6) 0%,
+    rgba(255, 165, 0, 0.6) 16.66%,
+    rgba(255, 255, 0, 0.6) 33.33%,
+    rgba(0, 255, 0, 0.6) 50%,
+    rgba(0, 127, 255, 0.6) 66.66%,
+    rgba(139, 0, 255, 0.6) 83.33%,
+    rgba(255, 0, 0, 0.6) 100%
+  );
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 8px 40px 0 rgba(255, 0, 255, 0.6),
+    0 0 60px 0 rgba(0, 255, 255, 0.5),
+    0 0 100px 0 rgba(255, 255, 0, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 0 40px 0 rgba(255, 255, 255, 0.3);
+}
+
+.pokemon-card.apex-card:hover {
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow:
+    0 12px 50px 0 rgba(255, 0, 255, 0.8),
+    0 0 80px 0 rgba(0, 255, 255, 0.7),
+    0 0 120px 0 rgba(255, 255, 0, 0.6),
+    0 0 160px 0 rgba(0, 255, 0, 0.5),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
+    inset 0 0 50px 0 rgba(255, 255, 255, 0.4);
+}
+
+@keyframes shinyPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 8px 40px 0 rgba(255, 215, 0, 0.6),
+      0 0 60px 0 rgba(255, 215, 0, 0.4),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
+      inset 0 0 40px 0 rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 12px 50px 0 rgba(255, 215, 0, 0.8),
+      0 0 80px 0 rgba(255, 215, 0, 0.5),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
+      inset 0 0 50px 0 rgba(255, 215, 0, 0.4);
+  }
+}
+
+@keyframes shadowPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 10px 50px 0 rgba(138, 43, 226, 0.9),
+      0 0 80px 0 rgba(138, 43, 226, 0.7),
+      0 0 120px 0 rgba(138, 43, 226, 0.5),
+      0 0 160px 0 rgba(138, 43, 226, 0.3),
+      inset 0 2px 0 0 rgba(255, 255, 255, 0.5),
+      inset 0 0 60px 0 rgba(138, 43, 226, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 15px 60px 0 rgba(138, 43, 226, 1),
+      0 0 100px 0 rgba(138, 43, 226, 0.8),
+      0 0 150px 0 rgba(138, 43, 226, 0.6),
+      0 0 200px 0 rgba(138, 43, 226, 0.4),
+      inset 0 2px 0 0 rgba(255, 255, 255, 0.6),
+      inset 0 0 70px 0 rgba(138, 43, 226, 0.6);
+  }
+}
+
+@keyframes purifiedPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 8px 40px 0 rgba(255, 255, 255, 0.6),
+      0 0 60px 0 rgba(255, 255, 255, 0.4),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
+      inset 0 0 40px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 12px 50px 0 rgba(255, 255, 255, 0.8),
+      0 0 80px 0 rgba(255, 255, 255, 0.5),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
+      inset 0 0 50px 0 rgba(255, 255, 255, 0.4);
+  }
+}
+
+@keyframes shine {
+  0%,
+  100% {
+    opacity: 0;
+    filter: blur(1px);
+  }
+  25% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  75% {
+    opacity: 0.8;
+  }
+}

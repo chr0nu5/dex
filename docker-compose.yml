@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dex-backend
+    volumes:
+      - ./backend/files:/app/files
+      - ./backend/data:/app/data
+    environment:
+      - FLASK_ENV=production
+    networks:
+      - dex-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dex-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - dex-network
+    restart: unless-stopped
+
+networks:
+  dex-network:
+    driver: bridge
+
+volumes:
+  backend-files:
+  backend-data:
