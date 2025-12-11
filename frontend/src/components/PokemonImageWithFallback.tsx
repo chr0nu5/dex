@@ -1,6 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from "react";
-
-const Pokemon3D = lazy(() => import("./Pokemon3D"));
+import React, { useState, useEffect, Suspense } from "react";
 
 interface PokemonImageProps {
   number: number; // Dex number
@@ -69,15 +67,7 @@ const PokemonImage: React.FC<PokemonImageProps> = ({
               }}
             />
           }
-        >
-          <Pokemon3D
-            number={number}
-            width={width}
-            height={height}
-            transparent
-            autoRotate={false}
-          />
-        </Suspense>
+        ></Suspense>
       </div>
     );
   }
