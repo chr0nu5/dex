@@ -35,7 +35,7 @@ jobs:
           NODE_ENV: production
           REACT_APP_API_URL: https://pokedeiz-api.john.dev.br
         run: |
-          npm ci --legacy-peer-deps
+          npm install --legacy-peer-deps
           npm run build
 
       - name: Build and tag the frontend image
