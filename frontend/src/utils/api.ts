@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_URL || "/";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 export const apiClient = {
   async get(endpoint: string) {
@@ -63,7 +63,6 @@ export const apiClient = {
       search?: string;
       order_by?: string;
       order_dir?: string;
-      unique?: boolean;
     }
   ) {
     let endpoint = `/api/file/${userId}/${fileId}`;
@@ -72,21 +71,10 @@ export const apiClient = {
       if (params.search) queryParams.append("search", params.search);
       if (params.order_by) queryParams.append("order_by", params.order_by);
       if (params.order_dir) queryParams.append("order_dir", params.order_dir);
-      if (params.unique) queryParams.append("unique", "true");
       const queryString = queryParams.toString();
       if (queryString) endpoint += `?${queryString}`;
     }
     return this.get(endpoint);
-  },
-
-  async deleteFile(userId: string, fileId: string) {
-    const response = await fetch(`${API_URL}/api/file/${userId}/${fileId}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response.json();
   },
 };
 
