@@ -12,7 +12,13 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="../frontend/build")
 
 # Configure CORS - allow all origins
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(
+    app,
+    origins="*",
+    methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    supports_credentials=False,
+)
 
 # Create necessary directories on startup
 REQUIRED_DIRS = ["files", "data", "uploads"]
