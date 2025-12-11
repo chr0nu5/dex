@@ -30,3 +30,7 @@ jobs:
         working-directory: ./backend
         run: |
           docker push $CONTAINER_IMAGE
+
+      - name: Deploy to Portainer
+        run: |
+          curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/f38ed076-cd89-4bc7-aefe-2a82b3195718
