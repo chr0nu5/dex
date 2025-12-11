@@ -39,7 +39,7 @@ jobs:
         working-directory: ./frontend
         env:
           NODE_ENV: production
-          REACT_APP_API_URL: https://pokedeiz-api.john.dev.br
+          REACT_APP_API_URL: https://pokedeiz.john.dev.br
         run: npm run build
 
       - name: Build and tag the frontend image
