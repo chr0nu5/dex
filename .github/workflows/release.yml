@@ -3,10 +3,6 @@ name: Release Backend
 on:
   push:
     branches: [main]
-    paths:
-      - "backend/**"
-      - "frontend/**"
-      - ".github/workflows/release-backend.yml"
 
 env:
   CONTAINER_IMAGE: chr0nu5/base:pokedeiz-backend
@@ -53,4 +49,4 @@ jobs:
 
       - name: Deploy to Portainer
         run: |
-          curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/f38ed076-cd89-4bc7-aefe-2a82b3195718
+          curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/b5c8366a-2d1f-4808-83d2-bf1c3b4086d1
