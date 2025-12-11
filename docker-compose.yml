@@ -11,6 +11,8 @@ services:
       - ./backend/data:/app/data
     environment:
       - FLASK_ENV=production
+    ports:
+      - "5001:5001"
     networks:
       - dex-network
     restart: unless-stopped

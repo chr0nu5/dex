@@ -1,6 +1,18 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { message, Progress, Card, List, Typography } from "antd";
-import { FileTextOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import {
+  message,
+  Progress,
+  Card,
+  List,
+  Typography,
+  Button,
+  Popconfirm,
+} from "antd";
+import {
+  FileTextOutlined,
+  CheckCircleOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../utils/api";
 import { getUserId } from "../utils/userId";
@@ -41,6 +53,7 @@ const DexPage: React.FC = () => {
   }, []);
 
   // Poll progress during upload
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!currentFileId || !uploading) return;
 
@@ -61,6 +74,7 @@ const DexPage: React.FC = () => {
     }, 500);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFileId, uploading]);
 
   const loadUserFiles = async () => {
@@ -104,6 +118,7 @@ const DexPage: React.FC = () => {
 
       await uploadFile(file);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [userId]
   );
 
@@ -127,6 +142,16 @@ const DexPage: React.FC = () => {
       message.error(`Upload failed: ${error.message}`);
       setUploading(false);
       setProgress(null);
+    }
+  };
+
+  const handleDeleteFile = async (fileId: string, fileName: string) => {
+    try {
+      await apiClient.deleteFile(userId, fileId);
+      message.success(`File "${fileName}" deleted successfully`);
+      loadUserFiles();
+    } catch (error: any) {
+      message.error(`Failed to delete file: ${error.message}`);
     }
   };
 
@@ -177,10 +202,10 @@ const DexPage: React.FC = () => {
 
         <div
           style={{
-            color: "rgba(255, 255, 255, 0.95)",
+            color: "#e0e0e0",
             fontSize: "20px",
             fontWeight: "400",
-            textShadow: "0 2px 4px rgba(0, 0, 0, 0.5)",
+            textShadow: "0 2px 4px rgba(0, 0, 0, 0.8)",
             width: "100%",
           }}
         >
@@ -189,8 +214,9 @@ const DexPage: React.FC = () => {
               <div
                 style={{
                   fontSize: "24px",
-                  fontWeight: "500",
+                  fontWeight: "600",
                   marginBottom: "20px",
+                  color: "#ffffff",
                 }}
               >
                 {progress?.status === "uploading"
@@ -201,12 +227,12 @@ const DexPage: React.FC = () => {
                 percent={progressPercent}
                 status="active"
                 strokeColor={{
-                  "0%": "#667eea",
-                  "100%": "#764ba2",
+                  "0%": "#5555ff",
+                  "100%": "#8a2be2",
                 }}
                 style={{ marginBottom: "10px" }}
               />
-              <div style={{ fontSize: "16px", opacity: 0.8 }}>
+              <div style={{ fontSize: "16px", color: "#b0b0c0" }}>
                 {progress?.current} / {progress?.total}
               </div>
             </>
@@ -215,13 +241,14 @@ const DexPage: React.FC = () => {
               <div
                 style={{
                   fontSize: "24px",
-                  fontWeight: "500",
+                  fontWeight: "600",
                   marginBottom: "10px",
+                  color: "#ffffff",
                 }}
               >
                 {isDragOver ? "Drop it here!" : "Drop your JSON here"}
               </div>
-              <div style={{ fontSize: "16px", opacity: 0.8 }}>
+              <div style={{ fontSize: "16px", color: "#b0b0c0" }}>
                 Snorlax is waiting...
               </div>
             </>
@@ -243,7 +270,7 @@ const DexPage: React.FC = () => {
           <Title
             level={4}
             style={{
-              color: "rgba(255, 255, 255, 0.95)",
+              color: "#ffffff",
               marginBottom: "16px",
               textAlign: "center",
             }}
@@ -255,55 +282,113 @@ const DexPage: React.FC = () => {
             renderItem={(file) => (
               <List.Item
                 style={{
-                  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
                   padding: "12px 0",
-                  cursor: file.enriched ? "pointer" : "default",
+                  transition: "background 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
                 }}
-                onClick={() => {
-                  if (file.enriched) {
-                    navigate(`/dex/${file.id}`);
-                  }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(85, 85, 255, 0.05)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
                 }}
               >
-                <List.Item.Meta
-                  avatar={
-                    <FileTextOutlined
+                <div
+                  style={{
+                    flex: 1,
+                    cursor: file.enriched ? "pointer" : "default",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                  onClick={() => {
+                    if (file.enriched) {
+                      navigate(`/dex/${file.id}`);
+                    }
+                  }}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      <FileTextOutlined
+                        style={{
+                          fontSize: "24px",
+                          color: "#e0e0e0",
+                        }}
+                      />
+                    }
+                    title={
+                      <Text
+                        style={{
+                          color: "#ffffff",
+                          fontSize: "16px",
+                          fontWeight: "500",
+                        }}
+                      >
+                        {file.user && file.date
+                          ? (() => {
+                              const date = new Date(file.date);
+                              const formattedDate = date.toLocaleDateString(
+                                "pt-BR",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                }
+                              );
+                              return `${file.user} • ${formattedDate}`;
+                            })()
+                          : file.filename.replace(".json", "")}
+                      </Text>
+                    }
+                  />
+                </div>
+                <div
+                  style={{ display: "flex", gap: "12px", alignItems: "center" }}
+                >
+                  {file.enriched && (
+                    <CheckCircleOutlined
                       style={{
-                        fontSize: "24px",
-                        color: "rgba(255, 255, 255, 0.9)",
+                        fontSize: "20px",
+                        color: "#52c41a",
                       }}
                     />
-                  }
-                  title={
-                    <Text
-                      style={{
-                        color: "rgba(255, 255, 255, 0.95)",
-                        fontSize: "16px",
-                      }}
-                    >
-                      {file.filename}
-                    </Text>
-                  }
-                  description={
-                    <Text
-                      style={{
-                        color: "rgba(255, 255, 255, 0.7)",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {file.user && `User: ${file.user} • `}
-                      {new Date(file.upload_date).toLocaleDateString()}
-                    </Text>
-                  }
-                />
-                {file.enriched && (
-                  <CheckCircleOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#52c41a",
+                  )}
+                  <Popconfirm
+                    title="Delete file"
+                    description={`Are you sure you want to delete "${file.filename}"?`}
+                    onConfirm={(e) => {
+                      e?.stopPropagation();
+                      handleDeleteFile(file.id, file.filename);
                     }}
-                  />
-                )}
+                    okText="Yes"
+                    cancelText="No"
+                    okButtonProps={{
+                      danger: true,
+                      style: {
+                        background: "#ff4d4f",
+                        borderColor: "#ff4d4f",
+                      },
+                    }}
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        color: "#ff4d4f",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background =
+                          "rgba(255, 77, 79, 0.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    />
+                  </Popconfirm>
+                </div>
               </List.Item>
             )}
           />

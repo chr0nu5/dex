@@ -17,7 +17,7 @@ CORS(
     resources={
         r"/api/*": {
             "origins": ["http://localhost:3000", "http://localhost:5000"],
-            "methods": ["GET", "POST", "OPTIONS"],
+            "methods": ["GET", "POST", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type"],
             "supports_credentials": False,
         }
@@ -439,9 +439,11 @@ def get_user_files_metadata(user_id):
         stat = os.stat(filepath)
         user, date = extract_metadata_from_filename(filename)
 
+        file_id_clean = filename.replace(".json", "")
         files.append(
             {
-                "id": filename.replace(".json", ""),
+                "id": file_id_clean,
+                "file_id": file_id_clean,  # Explicitly include file_id for clarity
                 "filename": filename,
                 "user": user,
                 "date": date,
@@ -499,7 +501,8 @@ def pick_image_animated(rec: dict) -> str:
 
 def enrich_pokemon(raw_data):
     """Enrich a single pokemon with metadata from master.json"""
-    p = {k.replace("mon_", ""): v for k, v in raw_data.items()}
+    # Remove mon_ prefix and convert keys to lowercase for consistency
+    p = {k.replace("mon_", "").lower(): v for k, v in raw_data.items()}
 
     number = p.get("number")
     form = p.get("form")
@@ -642,9 +645,17 @@ def upload_json():
         if not isinstance(raw_data, dict):
             return jsonify({"error": "Invalid JSON format. Expected an object"}), 400
 
+        # Check if the data has a fileData wrapper
+        pokemon_data = raw_data.get("fileData", raw_data)
+
+        if not isinstance(pokemon_data, dict):
+            return jsonify(
+                {"error": "Invalid JSON format. Expected pokemon data as object"}
+            ), 400
+
         # Track progress
         file_id = file.filename.replace(".json", "")
-        total = len(raw_data)
+        total = len(pokemon_data)
         ENRICHMENT_PROGRESS[file_id] = {
             "current": 0,
             "total": total,
@@ -652,9 +663,11 @@ def upload_json():
         }
 
         enriched_data = []
-        for idx, (pokemon_id, pokemon) in enumerate(raw_data.items()):
-            pokemon["id"] = pokemon_id
-            enriched = enrich_pokemon(pokemon)
+        for idx, (pokemon_id, pokemon) in enumerate(pokemon_data.items()):
+            # Create a copy to avoid modifying the original
+            pokemon_copy = dict(pokemon) if isinstance(pokemon, dict) else {}
+            pokemon_copy["id"] = pokemon_id
+            enriched = enrich_pokemon(pokemon_copy)
             enriched_data.append(enriched)
             ENRICHMENT_PROGRESS[file_id]["current"] = idx + 1
 
@@ -699,6 +712,67 @@ def get_progress(file_id):
         file_id, {"current": 0, "total": 0, "status": "not_found"}
     )
     return jsonify(progress)
+
+
+@app.route("/api/file/<user_id>/<path:file_id>", methods=["DELETE"])
+def delete_file(user_id, file_id):
+    """Delete a file and its enriched version"""
+    try:
+        user_dir = os.path.join(os.path.dirname(__file__), "uploads", user_id)
+
+        # Try both formats: direct filename and user-date format
+        possible_files = []
+
+        # Direct filename
+        if file_id.endswith(".json"):
+            possible_files.append(file_id)
+            possible_files.append(file_id.replace(".json", "_enriched.json"))
+        else:
+            possible_files.append(f"{file_id}.json")
+            possible_files.append(f"{file_id}_enriched.json")
+
+        # Also check for files matching user-date pattern
+        if os.path.exists(user_dir):
+            for filename in os.listdir(user_dir):
+                if filename.endswith(".json"):
+                    # Extract user and date from filename
+                    match = re.match(
+                        r"Pokemons-([^-]+)-(\d{2}-\d{2}-\d{4})\.json", filename
+                    )
+                    if match:
+                        file_user = match.group(1)
+                        file_date = match.group(2)
+                        # Convert date format from DD-MM-YYYY to YYYY-MM-DD for comparison
+                        parts = file_date.split("-")
+                        if len(parts) == 3:
+                            iso_date = f"{parts[2]}-{parts[1]}-{parts[0]}"
+                            file_pattern = f"{file_user} - {iso_date}"
+                            if file_pattern == file_id:
+                                possible_files.append(filename)
+                                possible_files.append(
+                                    filename.replace(".json", "_enriched.json")
+                                )
+
+        deleted_files = []
+        for filename in possible_files:
+            filepath = os.path.join(user_dir, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                deleted_files.append(filename)
+
+        if deleted_files:
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"Deleted {len(deleted_files)} file(s)",
+                    "deleted_files": deleted_files,
+                }
+            ), 200
+        else:
+            return jsonify({"error": "File not found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 def apply_search_filter(pokemon_list, search_query):
@@ -766,6 +840,18 @@ def apply_search_filter(pokemon_list, search_query):
         # HP range
         elif search_query.startswith("hp"):
             match = match_range(search_query, "hp", pokemon.get("hp", 0))
+
+        # Attack range: atk{N}, atk{N}-, atk-{N}, atk{N}-{M}
+        elif search_query.startswith("atk"):
+            match = match_range(search_query, "atk", pokemon.get("attack", 0))
+
+        # Defence range: def{N}, def{N}-, def-{N}, def{N}-{M}
+        elif search_query.startswith("def"):
+            match = match_range(search_query, "def", pokemon.get("defence", 0))
+
+        # Stamina range: stm{N}, stm{N}-, stm-{N}, stm{N}-{M}
+        elif search_query.startswith("stm"):
+            match = match_range(search_query, "stm", pokemon.get("stamina", 0))
 
         # Number range: {N}, {N}-, -{N}, {N}-{M}
         elif re.match(r"^\d+(-\d*)?$|^-\d+$", search_query):
@@ -852,6 +938,72 @@ def apply_search_filter(pokemon_list, search_query):
     return filtered
 
 
+def filter_unique_pokemon(pokemon_list):
+    """
+    Filter to return only unique pokemon per species and special characteristics.
+    For each species (number), returns one pokemon of each special type:
+    - normal (no special characteristics)
+    - shiny
+    - shadow
+    - purified
+    - apex
+    - lucky (combined with above)
+
+    Example: 4 Bulbasaurs (2 shadow, 2 shiny) -> returns 1 shadow, 1 shiny
+    """
+    unique_map = {}
+
+    for pokemon in pokemon_list:
+        number = pokemon.get("number")
+        if number is None:
+            continue
+
+        # Determine the special characteristics
+        is_shiny = pokemon.get("shiny", False)
+        is_shadow = pokemon.get("shadow", False)
+        is_purified = pokemon.get("purified", False)
+        is_apex = pokemon.get("apex", False)
+        is_lucky = pokemon.get("lucky", False)
+
+        # Create a key based on species and special characteristics
+        # Priority: apex > shiny > shadow > purified > normal
+        if is_apex:
+            key = (number, "apex", is_lucky)
+        elif is_shiny:
+            key = (number, "shiny", is_lucky)
+        elif is_shadow:
+            key = (number, "shadow", is_lucky)
+        elif is_purified:
+            key = (number, "purified", is_lucky)
+        else:
+            key = (number, "normal", is_lucky)
+
+        # Keep the pokemon with the largest size (XXL > XL > normal > XS > XXS)
+        size_priority = {
+            "xxl": 5,
+            "xl": 4,
+            "": 3,  # normal (no size)
+            "xs": 2,
+            "xxs": 1,
+        }
+
+        if key not in unique_map:
+            unique_map[key] = pokemon
+        else:
+            # Keep the one with larger size (using weight_label)
+            existing = unique_map[key]
+            current_size = pokemon.get("weight_label", "").lower()
+            existing_size = existing.get("weight_label", "").lower()
+
+            current_priority = size_priority.get(current_size, 3)
+            existing_priority = size_priority.get(existing_size, 3)
+
+            if current_priority > existing_priority:
+                unique_map[key] = pokemon
+
+    return list(unique_map.values())
+
+
 def match_range(query, prefix, value):
     """Match range queries like cp100, cp100-, cp-100, cp100-200"""
     try:
@@ -912,7 +1064,7 @@ def match_number_range(query, number):
         return False
 
 
-@app.route("/api/file/<user_id>/<file_id>", methods=["GET"])
+@app.route("/api/file/<user_id>/<path:file_id>", methods=["GET"])
 def get_file_data(user_id, file_id):
     """Get enriched Pokemon data for a specific file with optional filtering and sorting"""
     # Try to find the enriched file
@@ -921,24 +1073,77 @@ def get_file_data(user_id, file_id):
     if not os.path.exists(user_dir):
         return jsonify({"error": "User directory not found"}), 404
 
-    # Look for the enriched file
-    enriched_path = os.path.join(user_dir, f"{file_id}_enriched.json")
+    # Decode URL-encoded file_id
+    from urllib.parse import unquote
 
-    if not os.path.exists(enriched_path):
-        return jsonify({"error": "Enriched file not found"}), 404
+    file_id = unquote(file_id)
+
+    # Look for the enriched file - try multiple patterns
+    enriched_path = None
+
+    # First, try to find by matching user and date from file_id
+    if " - " in file_id:
+        # file_id is in format "User - Date", need to find matching file
+        user_part, date_part = file_id.split(" - ", 1)
+        for filename in os.listdir(user_dir):
+            if filename.endswith("_enriched.json"):
+                user, date = extract_metadata_from_filename(
+                    filename.replace("_enriched.json", ".json")
+                )
+                if user == user_part and date == date_part:
+                    enriched_path = os.path.join(user_dir, filename)
+                    break
+
+    # If not found, try direct filename match
+    if not enriched_path:
+        possible_paths = [
+            os.path.join(user_dir, f"{file_id}_enriched.json"),
+            os.path.join(
+                user_dir, f"{file_id}.json_enriched.json"
+            ),  # In case file_id has .json
+        ]
+
+        for path in possible_paths:
+            if os.path.exists(path):
+                enriched_path = path
+                break
+
+    if not enriched_path:
+        # List available files for debugging
+        available_files = os.listdir(user_dir) if os.path.exists(user_dir) else []
+        print(f"[DEBUG] Looking for file_id: {file_id}")
+        print(f"[DEBUG] Available files in {user_dir}: {available_files}")
+        return jsonify(
+            {
+                "error": "Enriched file not found",
+                "file_id": file_id,
+                "available_files": available_files,
+            }
+        ), 404
 
     try:
         with open(enriched_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+        print(f"[DEBUG] Loaded {len(data)} pokemon from {enriched_path}")
+
         # Get query parameters for filtering and sorting
         search = request.args.get("search", "").lower()
         order_by = request.args.get("order_by", "number")
         order_dir = request.args.get("order_dir", "asc")
+        unique_only = request.args.get("unique", "").lower() == "true"
 
         # Apply advanced search filter
         if search:
+            print(f"[DEBUG] Applying search filter: {search}")
             data = apply_search_filter(data, search)
+            print(f"[DEBUG] After filter: {len(data)} pokemon")
+
+        # Apply unique filter if requested
+        if unique_only:
+            print("[DEBUG] Applying unique filter")
+            data = filter_unique_pokemon(data)
+            print(f"[DEBUG] After unique filter: {len(data)} pokemon")
 
         # Apply sorting
         reverse = order_dir == "desc"
@@ -1025,4 +1230,4 @@ if __name__ == "__main__":
     print("📂 Uploads directory: ./uploads")
     print("🔥 Hot reload enabled")
     print("🌐 CORS enabled for localhost:3000")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)

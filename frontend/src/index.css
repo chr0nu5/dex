@@ -17,9 +17,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: url('../public/bg.jpg') no-repeat center center fixed;
-  background-size: cover;
+  background: url('./background.png') center center / cover no-repeat fixed;
   min-height: 100vh;
+  color: #e0e0e0;
 }
 
 code {

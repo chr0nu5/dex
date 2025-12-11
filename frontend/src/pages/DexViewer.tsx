@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FixedSizeGrid as Grid } from "react-window";
-import { Tag, Card, Button } from "antd";
+import { Tag, Card, Button, Checkbox } from "antd";
 import {
   ThunderboltOutlined,
   SafetyOutlined,
@@ -48,7 +48,7 @@ interface UserFile {
 }
 
 const CARD_WIDTH = 240;
-const CARD_HEIGHT = 340;
+const CARD_HEIGHT = 380;
 const GAP = 48;
 
 const DexViewer: React.FC = () => {
@@ -60,7 +60,12 @@ const DexViewer: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [orderBy, setOrderBy] = useState("number");
   const [orderDir, setOrderDir] = useState("asc");
+  const [uniqueOnly, setUniqueOnly] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [containerDimensions, setContainerDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight - 80,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
   const userId = getUserId();
 
@@ -72,10 +77,31 @@ const DexViewer: React.FC = () => {
   }, [searchQuery]);
 
   useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        setContainerDimensions({
+          width: containerRef.current.clientWidth,
+          height: window.innerHeight - 80,
+        });
+      }
+    };
+
+    // Set initial dimensions
+    handleResize();
+
+    // Add resize listener
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
     loadFileData();
     loadUserFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, debouncedSearch, orderBy, orderDir]);
+  }, [fileId, debouncedSearch, orderBy, orderDir, uniqueOnly]);
 
   const loadFileData = async () => {
     if (!fileId) return;
@@ -86,6 +112,7 @@ const DexViewer: React.FC = () => {
         search: debouncedSearch,
         order_by: orderBy,
         order_dir: orderDir,
+        unique: uniqueOnly,
       });
       setFileData(data);
     } catch (error) {
@@ -136,9 +163,7 @@ const DexViewer: React.FC = () => {
   }, [fileData]);
 
   const { columnsCount, rowsCount, containerWidth } = useMemo(() => {
-    const containerWidth =
-      containerRef.current?.clientWidth || window.innerWidth;
-    const availableWidth = containerWidth; // Account for padding
+    const availableWidth = containerDimensions.width;
     const columnsCount = Math.max(
       1,
       Math.floor(availableWidth / (CARD_WIDTH + GAP))
@@ -148,7 +173,7 @@ const DexViewer: React.FC = () => {
       : 0;
 
     return { columnsCount, rowsCount, containerWidth: availableWidth };
-  }, [fileData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fileData, containerDimensions.width]);
 
   const renderPokemonCard = useCallback(
     ({
@@ -217,6 +242,21 @@ const DexViewer: React.FC = () => {
               position: "relative",
             }}
           >
+            {/* Dark overlay for better text readability */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background:
+                  "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
+                pointerEvents: "none",
+                zIndex: 1,
+              }}
+            />
+
             {/* Lucky Overlay */}
             {isLucky && (
               <img
@@ -245,7 +285,7 @@ const DexViewer: React.FC = () => {
                   width: "70%",
                   left: "50%",
                   transform: "translateX(-50%)",
-                  bottom: "145px",
+                  bottom: "175px",
                   zIndex: 4,
                   opacity: 0.3,
                   pointerEvents: "none",
@@ -272,23 +312,30 @@ const DexViewer: React.FC = () => {
             )}
 
             <Card
-              bordered={false}
+              variant="outlined"
               style={{
                 background: "transparent",
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
               }}
-              bodyStyle={{
-                padding: "12px",
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-              }}
               styles={{
                 actions: {
-                  background: "transparent",
-                  borderTop: "none",
+                  background: "rgba(0, 0, 0, 0.7)",
+                  backdropFilter: "blur(10px)",
+                  borderTop: "1.5px solid rgba(255, 255, 255, 0.2)",
+                  padding: "12px 0",
+                  margin: "0",
+                  position: "relative",
+                  zIndex: 2,
+                  width: "100%",
+                  listStyle: "none",
+                },
+                body: {
+                  padding: "12px",
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
                 },
               }}
               actions={[
@@ -298,17 +345,23 @@ const DexViewer: React.FC = () => {
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
+                    gap: "4px",
                   }}
                 >
                   <ThunderboltOutlined
-                    style={{ fontSize: "18px", color: "#ff4d4f" }}
+                    style={{
+                      fontSize: "20px",
+                      color: "#ff4d4f",
+                      filter: "drop-shadow(0 2px 4px rgba(255, 77, 79, 0.8))",
+                    }}
                   />
                   <span
                     style={{
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      color: "white",
-                      textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                      fontSize: "15px",
+                      fontWeight: "800",
+                      color: "#FFFFFF",
+                      textShadow:
+                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
                     }}
                   >
                     {pokemon.attack}
@@ -320,17 +373,23 @@ const DexViewer: React.FC = () => {
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
+                    gap: "4px",
                   }}
                 >
                   <SafetyOutlined
-                    style={{ fontSize: "18px", color: "#faad14" }}
+                    style={{
+                      fontSize: "20px",
+                      color: "#faad14",
+                      filter: "drop-shadow(0 2px 4px rgba(250, 173, 20, 0.8))",
+                    }}
                   />
                   <span
                     style={{
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      color: "white",
-                      textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                      fontSize: "15px",
+                      fontWeight: "800",
+                      color: "#FFFFFF",
+                      textShadow:
+                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
                     }}
                   >
                     {pokemon.defence}
@@ -342,17 +401,23 @@ const DexViewer: React.FC = () => {
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
+                    gap: "4px",
                   }}
                 >
                   <HeartOutlined
-                    style={{ fontSize: "18px", color: "#eb2f96" }}
+                    style={{
+                      fontSize: "20px",
+                      color: "#eb2f96",
+                      filter: "drop-shadow(0 2px 4px rgba(235, 47, 150, 0.8))",
+                    }}
                   />
                   <span
                     style={{
-                      fontSize: "14px",
-                      fontWeight: "700",
-                      color: "white",
-                      textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                      fontSize: "15px",
+                      fontWeight: "800",
+                      color: "#FFFFFF",
+                      textShadow:
+                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
                     }}
                   >
                     {pokemon.stamina}
@@ -367,14 +432,16 @@ const DexViewer: React.FC = () => {
                   gap: "8px",
                   justifyContent: "center",
                   marginBottom: "8px",
-                  background: "rgba(0, 0, 0, 0.4)",
+                  background: "rgba(0, 0, 0, 0.85)",
                   borderRadius: "20px",
-                  padding: "6px 12px",
+                  padding: "8px 14px",
                   boxShadow:
-                    "0 2px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15)",
-                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                  minHeight: "32px",
+                    "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                  border: "1.5px solid rgba(255, 255, 255, 0.2)",
+                  minHeight: "36px",
                   alignItems: "center",
+                  position: "relative",
+                  zIndex: 2,
                 }}
               >
                 {!isApex &&
@@ -397,10 +464,10 @@ const DexViewer: React.FC = () => {
                     {isApex && (
                       <ThunderboltFilled
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#FF00FF",
                           filter:
-                            "drop-shadow(0 0 8px rgba(255, 0, 255, 0.9)) drop-shadow(0 0 12px rgba(0, 255, 255, 0.6))",
+                            "drop-shadow(0 0 10px rgba(255, 0, 255, 1)) drop-shadow(0 0 15px rgba(0, 255, 255, 0.8)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Apex"
                       />
@@ -408,9 +475,10 @@ const DexViewer: React.FC = () => {
                     {isShiny && (
                       <StarOutlined
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#FFD700",
-                          filter: "drop-shadow(0 0 6px rgba(255, 215, 0, 0.8))",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Shiny"
                       />
@@ -418,10 +486,10 @@ const DexViewer: React.FC = () => {
                     {isShadow && (
                       <FireOutlined
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#8B2BE2",
                           filter:
-                            "drop-shadow(0 0 6px rgba(138, 43, 226, 0.8))",
+                            "drop-shadow(0 0 8px rgba(138, 43, 226, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Shadow"
                       />
@@ -429,10 +497,10 @@ const DexViewer: React.FC = () => {
                     {isPurified && (
                       <SmileOutlined
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#FFFFFF",
                           filter:
-                            "drop-shadow(0 0 6px rgba(255, 255, 255, 0.8))",
+                            "drop-shadow(0 0 8px rgba(255, 255, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Purified"
                       />
@@ -440,9 +508,10 @@ const DexViewer: React.FC = () => {
                     {isLucky && (
                       <GiftOutlined
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#FFA500",
-                          filter: "drop-shadow(0 0 6px rgba(255, 165, 0, 0.8))",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 165, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Lucky"
                       />
@@ -450,9 +519,10 @@ const DexViewer: React.FC = () => {
                     {pokemon.legendary && (
                       <TrophyOutlined
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#FF6347",
-                          filter: "drop-shadow(0 0 6px rgba(255, 99, 71, 0.8))",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Legendary"
                       />
@@ -460,10 +530,10 @@ const DexViewer: React.FC = () => {
                     {pokemon.mythic && (
                       <CrownOutlined
                         style={{
-                          fontSize: "20px",
+                          fontSize: "22px",
                           color: "#9B59B6",
                           filter:
-                            "drop-shadow(0 0 6px rgba(155, 89, 182, 0.8))",
+                            "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
                         }}
                         title="Mythical"
                       />
@@ -489,11 +559,6 @@ const DexViewer: React.FC = () => {
                   staticSrc={
                     pokemon.image ? `/${pokemon.image}` : "/img/placeholder.png"
                   }
-                  animatedSrc={
-                    pokemon.image_animated && !pokemon.costume
-                      ? pokemon.image_animated
-                      : undefined
-                  }
                   alt={pokemon.name}
                   className={
                     isApex
@@ -517,25 +582,29 @@ const DexViewer: React.FC = () => {
               </div>
 
               {/* Pokemon Info */}
-              <div style={{ textAlign: "center" }}>
+              <div
+                style={{ textAlign: "center", position: "relative", zIndex: 2 }}
+              >
                 {/* Name and IV Tags */}
                 <div
                   style={{
                     display: "flex",
-                    gap: "6px",
+                    gap: "8px",
                     justifyContent: "center",
-                    marginBottom: "12px",
+                    marginBottom: "10px",
                   }}
                 >
                   <Tag
-                    color="cyan"
                     style={{
                       margin: 0,
                       fontWeight: "600",
-                      fontSize: "13px",
-                      borderRadius: "12px",
-                      padding: "4px 12px",
-                      color: "#000000",
+                      fontSize: "12px",
+                      borderRadius: "8px",
+                      padding: "4px 10px",
+                      background: "#1e1e2e",
+                      border: "1px solid #3a3a54",
+                      color: "#e0e0e0",
+                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                     }}
                   >
                     {pokemon.gender_symbol && pokemon.gender_symbol !== "⚲" && (
@@ -546,21 +615,37 @@ const DexViewer: React.FC = () => {
                     {pokemon.name}
                   </Tag>
                   <Tag
-                    color={
-                      pokemon.iv >= 90
-                        ? "gold"
-                        : pokemon.iv >= 80
-                        ? "blue"
-                        : pokemon.iv >= 70
-                        ? "green"
-                        : "volcano"
-                    }
                     style={{
                       margin: 0,
                       fontWeight: "600",
-                      fontSize: "13px",
-                      borderRadius: "12px",
-                      padding: "4px 12px",
+                      fontSize: "12px",
+                      borderRadius: "8px",
+                      padding: "4px 10px",
+                      background:
+                        pokemon.iv >= 90
+                          ? "#2d4a2e"
+                          : pokemon.iv >= 80
+                          ? "#2d3a54"
+                          : pokemon.iv >= 70
+                          ? "#3a3a2e"
+                          : "#4a2e2e",
+                      border:
+                        pokemon.iv >= 90
+                          ? "1px solid #4a7c4d"
+                          : pokemon.iv >= 80
+                          ? "1px solid #4a5c7c"
+                          : pokemon.iv >= 70
+                          ? "1px solid #6c6c4a"
+                          : "1px solid #7c4a4a",
+                      color:
+                        pokemon.iv >= 90
+                          ? "#88cc88"
+                          : pokemon.iv >= 80
+                          ? "#88aacc"
+                          : pokemon.iv >= 70
+                          ? "#cccc88"
+                          : "#cc8888",
+                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                     }}
                   >
                     {pokemon.iv.toFixed(1)}%
@@ -571,19 +656,21 @@ const DexViewer: React.FC = () => {
                 <div
                   style={{
                     display: "flex",
-                    gap: "4px",
+                    gap: "8px",
                     justifyContent: "center",
                   }}
                 >
                   <Tag
                     style={{
-                      fontWeight: "500",
-                      fontSize: "11px",
+                      margin: 0,
+                      fontWeight: "600",
+                      fontSize: "12px",
                       borderRadius: "8px",
-                      padding: "2px 8px",
-                      background: "rgba(0, 0, 0, 0.4)",
-                      border: "1px solid rgba(255, 255, 255, 0.25)",
-                      color: "rgba(255, 255, 255, 0.9)",
+                      padding: "4px 10px",
+                      background: "#1e1e2e",
+                      border: "1px solid #3a3a54",
+                      color: "#e0e0e0",
+                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                     }}
                   >
                     CP {pokemon.cp}
@@ -591,13 +678,15 @@ const DexViewer: React.FC = () => {
                   {(pokemon.height_label || pokemon.weight_label) && (
                     <Tag
                       style={{
+                        margin: 0,
                         fontWeight: "600",
-                        fontSize: "11px",
+                        fontSize: "12px",
                         borderRadius: "8px",
-                        padding: "2px 8px",
-                        background: "rgba(255, 165, 0, 0.3)",
-                        border: "1px solid rgba(255, 165, 0, 0.6)",
-                        color: "rgba(255, 255, 255, 0.95)",
+                        padding: "4px 10px",
+                        background: "#3a2e2e",
+                        border: "1px solid #6c4a3a",
+                        color: "#cc9966",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                       }}
                     >
                       {pokemon.height_label?.toUpperCase() ||
@@ -611,6 +700,7 @@ const DexViewer: React.FC = () => {
         </div>
       );
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [fileData, columnsCount]
   );
 
@@ -621,15 +711,25 @@ const DexViewer: React.FC = () => {
           icon={<HomeOutlined />}
           onClick={() => navigate("/")}
           style={{
-            background: "rgba(255, 255, 255, 0.08)",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
-            color: "rgba(255, 255, 255, 0.95)",
+            background: "linear-gradient(145deg, #2d2d44, #3a3a54)",
+            border: "1px solid #4a4a6a",
+            color: "#e0e0e0",
             height: "48px",
             borderRadius: "12px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             minWidth: "48px",
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "#5555ff";
+            e.currentTarget.style.boxShadow =
+              "0 4px 12px rgba(85, 85, 255, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "#4a4a6a";
+            e.currentTarget.style.boxShadow = "none";
           }}
         />
 
@@ -638,14 +738,26 @@ const DexViewer: React.FC = () => {
           value={fileId || ""}
           onChange={handleFileChange}
         >
-          <option value="">Select a file...</option>
-          {userFiles.map((file) => (
-            <option key={file.file_id} value={file.file_id}>
-              {file.user && file.date
-                ? `${file.user} - ${file.date}`
-                : file.filename.replace(".json", "")}
-            </option>
-          ))}
+          {userFiles.map((file) => {
+            let displayName = file.filename.replace(".json", "");
+
+            if (file.user && file.date) {
+              // Format date to DD/MM/YYYY
+              const date = new Date(file.date);
+              const formattedDate = date.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              });
+              displayName = `${file.user} - ${formattedDate}`;
+            }
+
+            return (
+              <option key={file.file_id} value={file.file_id}>
+                {displayName}
+              </option>
+            );
+          })}
         </select>
 
         <input
@@ -654,18 +766,50 @@ const DexViewer: React.FC = () => {
           placeholder="Search Pokémon..."
           value={searchQuery}
           onChange={handleSearchChange}
+          style={{ flex: 1, minWidth: "200px" }}
         />
 
         <div
           style={{
-            background: "rgba(255, 255, 255, 0.08)",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
+            background: "linear-gradient(145deg, #2d2d44, #3a3a54)",
+            border: "1px solid #4a4a6a",
             borderRadius: "12px",
             padding: "0 18px",
             height: "48px",
             display: "flex",
             alignItems: "center",
-            color: "rgba(255, 255, 255, 0.95)",
+            gap: "12px",
+          }}
+        >
+          <Checkbox
+            checked={uniqueOnly}
+            onChange={(e) => setUniqueOnly(e.target.checked)}
+            style={{
+              color: "#e0e0e0",
+            }}
+          >
+            <span
+              style={{
+                color: "#ffffff",
+                fontWeight: "500",
+                fontSize: "14px",
+              }}
+            >
+              Unique
+            </span>
+          </Checkbox>
+        </div>
+
+        <div
+          style={{
+            background: "linear-gradient(145deg, #2d2d44, #3a3a54)",
+            border: "1px solid #4a4a6a",
+            borderRadius: "12px",
+            padding: "0 18px",
+            height: "48px",
+            display: "flex",
+            alignItems: "center",
+            color: "#ffffff",
             fontWeight: "600",
             fontSize: "16px",
             whiteSpace: "nowrap",
@@ -727,7 +871,7 @@ const DexViewer: React.FC = () => {
           <Grid
             columnCount={columnsCount}
             columnWidth={CARD_WIDTH + GAP}
-            height={window.innerHeight - 80}
+            height={containerDimensions.height}
             rowCount={rowsCount}
             rowHeight={CARD_HEIGHT + GAP}
             width={containerWidth}

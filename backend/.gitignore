@@ -8,3 +8,4 @@ venv/
 files/*
 !files/.gitkeep
 *.log
+uploads/
