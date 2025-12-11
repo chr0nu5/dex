@@ -146,6 +146,11 @@ const GeneratorPage: React.FC = () => {
       link.download = "pokemon-3d-output.png";
       link.href = canvas.toDataURL("image/png");
       link.click();
+
+      // Reset for new drop
+      setTimeout(() => {
+        setImages([]);
+      }, 500);
     });
   };
 
