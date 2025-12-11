@@ -54,3 +54,7 @@ jobs:
       - name: Deploy to Portainer
         run: |
           curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/d791d6fc-d67d-4ed9-afe7-6c6aeee3d4dc
+
+      - name: Clean Cache
+        run: |
+          curl -X Post https://api.cloudflare.com/client/v4/zones/0c9fb9eb38cf576406a2fca1897806d9/purge_cache
