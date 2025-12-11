@@ -1,6 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from "react";
-
-const Pokemon3DModel = lazy(() => import("./Pokemon3DModel"));
+import React, { useState, useEffect } from "react";
 
 interface PokemonCardImageProps {
   pokemonNumber: number; // Dex number (e.g., 1, 25, 150)
@@ -8,7 +6,7 @@ interface PokemonCardImageProps {
   animatedSrc?: string; // Path to animated GIF (optional)
   width?: number;
   height?: number;
-  use3D?: boolean; // Force 3D on/off
+  use3D?: boolean; // Force 3D on/off (deprecated, always false now)
   className?: string;
 }
 
@@ -18,40 +16,13 @@ const PokemonCardImage: React.FC<PokemonCardImageProps> = ({
   animatedSrc,
   width = 96,
   height = 96,
-  use3D = true,
+  use3D = false, // 3D disabled
   className = "",
 }) => {
-  const [imageType, setImageType] = useState<"3d" | "animated" | "static">(
-    "3d"
+  const [imageType, setImageType] = useState<"animated" | "static">(
+    animatedSrc ? "animated" : "static"
   );
   const [animatedLoaded, setAnimatedLoaded] = useState(false);
-  const [model3DFailed, setModel3DFailed] = useState(false);
-
-  // Check if 3D model exists
-  useEffect(() => {
-    if (!use3D) {
-      setImageType(animatedSrc ? "animated" : "static");
-      return;
-    }
-
-    const checkModel = async () => {
-      const pmNumber = `pm${String(pokemonNumber).padStart(4, "0")}`;
-      const modelPath = `/3d/${pmNumber}/${pmNumber}_00_Rig/${pmNumber}_00_Rig.fbx`;
-
-      try {
-        const response = await fetch(modelPath, { method: "HEAD" });
-        if (!response.ok) {
-          setModel3DFailed(true);
-          setImageType(animatedSrc ? "animated" : "static");
-        }
-      } catch {
-        setModel3DFailed(true);
-        setImageType(animatedSrc ? "animated" : "static");
-      }
-    };
-
-    checkModel();
-  }, [pokemonNumber, animatedSrc, use3D]);
 
   // Preload animated image
   useEffect(() => {
@@ -77,37 +48,6 @@ const PokemonCardImage: React.FC<PokemonCardImageProps> = ({
     justifyContent: "center",
     position: "relative",
   };
-
-  // Render 3D model
-  if (imageType === "3d" && !model3DFailed && use3D) {
-    return (
-      <div style={containerStyle} className={className}>
-        <Suspense
-          fallback={
-            <img
-              src={staticSrc}
-              alt={`Pokemon ${pokemonNumber}`}
-              style={{
-                maxWidth: "100%",
-                maxHeight: "100%",
-                imageRendering: "pixelated",
-              }}
-            />
-          }
-        >
-          <Pokemon3DModel
-            pokemonNumber={pokemonNumber}
-            width={width}
-            height={height}
-            autoRotate={false}
-            enableControls={true}
-            backgroundColor={null}
-            scale={1}
-          />
-        </Suspense>
-      </div>
-    );
-  }
 
   // Render animated GIF
   if (imageType === "animated" && animatedLoaded && animatedSrc) {
