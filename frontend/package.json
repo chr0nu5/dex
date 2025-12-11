@@ -52,6 +52,6 @@
   "proxy": "http://localhost:5000",
   "devDependencies": {
     "@types/html2canvas": "^0.5.35",
-    "@types/three": "^0.182.0"
+    "@types/three": "^0.160.0"
   }
 }
