@@ -3,6 +3,9 @@ name: Release Frontend
 on:
   push:
     branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/release-frontend.yml"
 
 env:
   CONTAINER_IMAGE: chr0nu5/base:pokedeiz-frontend

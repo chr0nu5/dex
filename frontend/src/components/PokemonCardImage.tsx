@@ -16,7 +16,6 @@ const PokemonCardImage: React.FC<PokemonCardImageProps> = ({
   animatedSrc,
   width = 96,
   height = 96,
-  use3D = false, // 3D disabled
   className = "",
 }) => {
   const [imageType, setImageType] = useState<"animated" | "static">(

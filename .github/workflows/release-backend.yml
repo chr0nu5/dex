@@ -3,6 +3,9 @@ name: Release Backend
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/release-backend.yml"
 
 env:
   CONTAINER_IMAGE: chr0nu5/base:pokedeiz-backend
