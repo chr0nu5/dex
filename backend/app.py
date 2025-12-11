@@ -9,7 +9,9 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-app = Flask(__name__, static_folder="../frontend/build")
+# In production (Docker), frontend is in ./build. In dev, it's ../frontend/build
+static_folder = "build" if os.path.exists("build") else "../frontend/build"
+app = Flask(__name__, static_folder=static_folder)
 
 # Configure CORS - allow all origins
 CORS(
