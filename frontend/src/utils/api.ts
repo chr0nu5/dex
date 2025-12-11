@@ -1,5 +1,6 @@
 // When served by Flask backend, use relative URLs. In dev mode, proxy handles it.
-const API_URL = process.env.NODE_ENV === 'development' ? "http://localhost:5000" : "";
+const API_URL =
+  process.env.NODE_ENV === "development" ? "http://localhost:5000" : "";
 
 export const apiClient = {
   async get(endpoint: string) {
