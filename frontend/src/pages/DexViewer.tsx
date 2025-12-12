@@ -464,17 +464,21 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
-                      color:
-                        pvpActive && pvpAtk !== undefined
-                          ? statColor(atkMatch)
-                          : "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
                     }}
                   >
-                    {pvpActive && pvpAtk !== undefined
-                      ? `${pokemon.attack}/${pvpAtk}`
-                      : pokemon.attack}
+                    {pvpActive && pvpAtk !== undefined ? (
+                      <>
+                        <span style={{ color: statColor(atkMatch) }}>
+                          {pokemon.attack}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
+                      </>
+                    ) : (
+                      pokemon.attack
+                    )}
                   </span>
                 </div>,
                 <div
@@ -497,17 +501,21 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
-                      color:
-                        pvpActive && pvpDef !== undefined
-                          ? statColor(defMatch)
-                          : "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
                     }}
                   >
-                    {pvpActive && pvpDef !== undefined
-                      ? `${pokemon.defence}/${pvpDef}`
-                      : pokemon.defence}
+                    {pvpActive && pvpDef !== undefined ? (
+                      <>
+                        <span style={{ color: statColor(defMatch) }}>
+                          {pokemon.defence}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpDef}</span>
+                      </>
+                    ) : (
+                      pokemon.defence
+                    )}
                   </span>
                 </div>,
                 <div
@@ -530,17 +538,21 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
-                      color:
-                        pvpActive && pvpStm !== undefined
-                          ? statColor(stmMatch)
-                          : "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
                     }}
                   >
-                    {pvpActive && pvpStm !== undefined
-                      ? `${pokemon.stamina}/${pvpStm}`
-                      : pokemon.stamina}
+                    {pvpActive && pvpStm !== undefined ? (
+                      <>
+                        <span style={{ color: statColor(stmMatch) }}>
+                          {pokemon.stamina}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpStm}</span>
+                      </>
+                    ) : (
+                      pokemon.stamina
+                    )}
                   </span>
                 </div>,
               ]}
@@ -1028,17 +1040,21 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
-                      color:
-                        pvpActive && pvpAtk !== undefined
-                          ? statColor(atkMatch)
-                          : "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
                     }}
                   >
-                    {pvpActive && pvpAtk !== undefined
-                      ? `${pokemon.attack}/${pvpAtk}`
-                      : pokemon.attack}
+                    {pvpActive && pvpAtk !== undefined ? (
+                      <>
+                        <span style={{ color: statColor(atkMatch) }}>
+                          {pokemon.attack}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
+                      </>
+                    ) : (
+                      pokemon.attack
+                    )}
                   </span>
                 </div>,
                 <div
@@ -1061,17 +1077,21 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
-                      color:
-                        pvpActive && pvpDef !== undefined
-                          ? statColor(defMatch)
-                          : "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
                     }}
                   >
-                    {pvpActive && pvpDef !== undefined
-                      ? `${pokemon.defence}/${pvpDef}`
-                      : pokemon.defence}
+                    {pvpActive && pvpDef !== undefined ? (
+                      <>
+                        <span style={{ color: statColor(defMatch) }}>
+                          {pokemon.defence}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpDef}</span>
+                      </>
+                    ) : (
+                      pokemon.defence
+                    )}
                   </span>
                 </div>,
                 <div
@@ -1094,17 +1114,21 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
-                      color:
-                        pvpActive && pvpStm !== undefined
-                          ? statColor(stmMatch)
-                          : "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
                     }}
                   >
-                    {pvpActive && pvpStm !== undefined
-                      ? `${pokemon.stamina}/${pvpStm}`
-                      : pokemon.stamina}
+                    {pvpActive && pvpStm !== undefined ? (
+                      <>
+                        <span style={{ color: statColor(stmMatch) }}>
+                          {pokemon.stamina}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpStm}</span>
+                      </>
+                    ) : (
+                      pokemon.stamina
+                    )}
                   </span>
                 </div>,
               ]}
