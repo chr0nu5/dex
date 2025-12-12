@@ -159,6 +159,82 @@ KNOWN_FORM_TOKENS = {
 }
 
 
+def _is_false_positive_gigantamax_display_form(display_form: str) -> bool:
+    """Some exports incorrectly flag isGigantamaxLikely for Zacian/Zamazenta crowned forms."""
+    if not display_form or not isinstance(display_form, str):
+        return False
+    # We intentionally match by suffix/substring to be robust to prefixes.
+    return (
+        "ZamazentaCrownedShield" in display_form
+        or "ZacianCrownedSword" in display_form
+        or display_form
+        in {
+            "PokemonDisplayProto_Form_ZamazentaCrownedShield",
+            "PokemonDisplayProto_Form_ZacianCrownedSword",
+        }
+    )
+
+
+def _is_false_positive_gigantamax_record(record: dict) -> bool:
+    """Exports may incorrectly set isGigantamaxLikely for some records.
+
+    Currently handled:
+    - Zacian/Zamazenta crowned forms (via display.form)
+    - Eternatus (via pokemon enum)
+    """
+    if not isinstance(record, dict):
+        return False
+
+    # 1) Display-form based suppressions (crowned forms)
+    disp = record.get("display")
+    if isinstance(disp, dict):
+        if _is_false_positive_gigantamax_display_form(str(disp.get("form") or "")):
+            return True
+
+    # 2) Species-based suppressions (Eternatus)
+    # SpeedUnlocker record uses e.g. "HoloPokemonId_Eternatus".
+    pokemon_enum_raw = _strip_known_prefix(
+        str(record.get("pokemon") or ""),
+        ["HoloPokemonId_", "HoloPokemonId"],
+    )
+    if _camel_to_upper_snake(pokemon_enum_raw) == "ETERNATUS":
+        return True
+
+    # Enriched records store the raw SpeedUnlocker record under "source".
+    src = record.get("source")
+    if isinstance(src, dict):
+        disp2 = src.get("display")
+        if isinstance(disp2, dict):
+            if _is_false_positive_gigantamax_display_form(
+                str(disp2.get("form") or "")
+            ):
+                return True
+        pokemon_enum_raw2 = _strip_known_prefix(
+            str(src.get("pokemon") or ""),
+            ["HoloPokemonId_", "HoloPokemonId"],
+        )
+        if _camel_to_upper_snake(pokemon_enum_raw2) == "ETERNATUS":
+            return True
+
+    # Fallback: Eternatus dex number (890)
+    try:
+        if int(record.get("number") or 0) == 890:
+            return True
+    except Exception:
+        pass
+
+    # Fallback: form token includes ETERNATUS
+    try:
+        if isinstance(record.get("form"), str) and "ETERNATUS" in record.get(
+            "form", ""
+        ):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 def _form_tokens_from_record(rec: dict) -> list[str]:
     """Extrai possíveis 'formas' a partir do campo 'form' do seu JSON."""
     form_raw = (rec.get("form") or "").strip().lower()
@@ -1305,6 +1381,10 @@ def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
 
     # Best-effort internal form token (used by our sprite naming logic).
     display = rec.get("display") if isinstance(rec.get("display"), dict) else {}
+    display_form_full = str(display.get("form") or "")
+    ignore_gmax = _is_false_positive_gigantamax_record(rec) or _is_false_positive_gigantamax_display_form(
+        display_form_full
+    )
     form_raw = _strip_known_prefix(
         str(display.get("form") or ""),
         ["PokemonDisplayProto_Form_"],
@@ -1322,7 +1402,12 @@ def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
 
     # Dynamax / Gigantamax hint
     dyn = rec.get("dynamax") if isinstance(rec.get("dynamax"), dict) else {}
-    if dyn.get("isGigantamaxLikely") and form_token and "GIGANTAMAX" not in form_token:
+    if (
+        dyn.get("isGigantamaxLikely")
+        and (not ignore_gmax)
+        and form_token
+        and "GIGANTAMAX" not in form_token
+    ):
         # Prefer SPECIES_GIGANTAMAX for sprite naming consistency.
         if form_token.endswith("_NORMAL") and pokemon_enum:
             form_token = f"{pokemon_enum}_GIGANTAMAX"
@@ -1383,7 +1468,7 @@ def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
         "move_1": fast_token,
         "move_2": charged_token,
         # Keep a simple hint for downstream consumers too.
-        "gigantamax": bool(dyn.get("isGigantamaxLikely")),
+        "gigantamax": bool(dyn.get("isGigantamaxLikely")) and (not ignore_gmax),
     }
 
 
@@ -1822,11 +1907,12 @@ def upload_json():
                     enriched["captured_s2_cell_id"] = pokemon.get("capturedS2CellId")
                     enriched["display"] = pokemon.get("display")
                     enriched["dynamax"] = pokemon.get("dynamax")
+                    _ignore_gmax = _is_false_positive_gigantamax_record(pokemon)
                     enriched["gigantamax"] = bool(
                         (pokemon.get("dynamax") or {}).get("isGigantamaxLikely")
                         if isinstance(pokemon.get("dynamax"), dict)
                         else False
-                    )
+                    ) and (not _ignore_gmax)
                     enriched["origin"] = pokemon.get("origin")
                     enriched["trade"] = pokemon.get("trade")
                     enriched["pokeball"] = pokemon.get("pokeball")
@@ -2225,6 +2311,8 @@ def apply_search_filter(pokemon_list, search_query):
         def _is_gigantamax(p: dict) -> bool:
             if not isinstance(p, dict):
                 return False
+            if _is_false_positive_gigantamax_record(p):
+                return False
             if bool(p.get("gigantamax")):
                 return True
             dyn = p.get("dynamax")
@@ -2346,7 +2434,7 @@ def apply_search_filter(pokemon_list, search_query):
         elif search_query in ["gigantamax", "gmax"]:
             match = _is_gigantamax(pokemon)
         elif search_query == "dynamax":
-            match = _is_dynamax_only(pokemon)
+            match = _is_dynamax_only(pokemon) or _is_gigantamax(pokemon)
 
         # Default: search in name or form
         else:
@@ -2577,11 +2665,12 @@ def get_file_data(user_id, file_id):
                         )
                         enriched["display"] = pokemon.get("display")
                         enriched["dynamax"] = pokemon.get("dynamax")
+                        _ignore_gmax = _is_false_positive_gigantamax_record(pokemon)
                         enriched["gigantamax"] = bool(
                             (pokemon.get("dynamax") or {}).get("isGigantamaxLikely")
                             if isinstance(pokemon.get("dynamax"), dict)
                             else False
-                        )
+                        ) and (not _ignore_gmax)
                         enriched["origin"] = pokemon.get("origin")
                         enriched["trade"] = pokemon.get("trade")
                         enriched["pokeball"] = pokemon.get("pokeball")
@@ -2759,6 +2848,8 @@ def get_file_data(user_id, file_id):
         def _is_gigantamax(p: dict) -> bool:
             if not isinstance(p, dict):
                 return False
+            if _is_false_positive_gigantamax_record(p):
+                return False
             if bool(p.get("gigantamax")):
                 return True
             dyn = p.get("dynamax")
@@ -2878,6 +2969,14 @@ def get_file_data(user_id, file_id):
         # filename-generation rules (avoids needing to re-enrich old uploads).
         for p in data:
             try:
+                if _is_false_positive_gigantamax_record(p):
+                    # Repair previously-enriched false positives so we don't emit
+                    # *_GIGANTAMAX sprites for crowned Zacian/Zamazenta.
+                    p["gigantamax"] = False
+                    if isinstance(p.get("form"), str) and "GIGANTAMAX" in p.get(
+                        "form", ""
+                    ):
+                        p["form"] = p["form"].replace("_GIGANTAMAX", "")
                 p["image"] = get_image_path(p)
             except Exception:
                 # Keep whatever is already present if something unexpected happens
