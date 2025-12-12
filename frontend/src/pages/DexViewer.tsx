@@ -288,6 +288,7 @@ const DexViewer: React.FC = () => {
       const pvpAtk = pokemon.pvp_meta_atk;
       const pvpDef = pokemon.pvp_meta_def;
       const pvpStm = pokemon.pvp_meta_stm;
+      const pvpCp = pokemon.pvp_meta_cp;
 
       const atkMatch =
         pvpActive &&
@@ -303,6 +304,10 @@ const DexViewer: React.FC = () => {
         Number(pokemon.stamina) === Number(pvpStm);
 
       const statColor = (match: boolean) => (match ? "#52c41a" : "#ff4d4f");
+      const cpMatch =
+        pvpActive &&
+        pvpCp !== undefined &&
+        Number(pokemon.cp) === Number(pvpCp);
 
       // Map lowercase types to uppercase format expected by TYPE_COLORS
       const types = (pokemon.types || []).map(
@@ -805,9 +810,18 @@ const DexViewer: React.FC = () => {
                       boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                     }}
                   >
-                    {pvpEnabled && pokemon.pvp_meta_cp !== undefined
-                      ? `CP ${pokemon.cp} / ${pokemon.pvp_meta_cp}`
-                      : `CP ${pokemon.cp}`}
+                    {pvpActive && pvpCp !== undefined ? (
+                      <>
+                        <span style={{ color: "#FFFFFF" }}>CP </span>
+                        <span style={{ color: statColor(cpMatch) }}>
+                          {pokemon.cp}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpCp}</span>
+                      </>
+                    ) : (
+                      `CP ${pokemon.cp}`
+                    )}
                   </Tag>
 
                   {pvpEnabled && pokemon.pvp_meta_rank !== undefined && (
@@ -827,7 +841,7 @@ const DexViewer: React.FC = () => {
                       #{pokemon.pvp_meta_rank}
                     </Tag>
                   )}
-                  {(pokemon.height_label || pokemon.weight_label) && (
+                  {!pvpActive && (pokemon.height_label || pokemon.weight_label) && (
                     <Tag
                       style={{
                         margin: 0,
@@ -868,6 +882,7 @@ const DexViewer: React.FC = () => {
       const pvpAtk = pokemon.pvp_meta_atk;
       const pvpDef = pokemon.pvp_meta_def;
       const pvpStm = pokemon.pvp_meta_stm;
+      const pvpCp = pokemon.pvp_meta_cp;
 
       const atkMatch =
         pvpActive &&
@@ -883,6 +898,10 @@ const DexViewer: React.FC = () => {
         Number(pokemon.stamina) === Number(pvpStm);
 
       const statColor = (match: boolean) => (match ? "#52c41a" : "#ff4d4f");
+      const cpMatch =
+        pvpActive &&
+        pvpCp !== undefined &&
+        Number(pokemon.cp) === Number(pvpCp);
 
       const types = (pokemon.types || []).map(
         (type: string) => `POKEMON_TYPE_${type.toUpperCase()}`
@@ -1133,117 +1152,121 @@ const DexViewer: React.FC = () => {
                 </div>,
               ]}
             >
+              {/* Pokemon Badges (same as normal card) */}
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                  display: "inline-flex",
+                  gap: "8px",
+                  justifyContent: "center",
                   marginBottom: "8px",
+                  background: "rgba(0, 0, 0, 0.85)",
+                  borderRadius: "20px",
+                  padding: "8px 14px",
+                  boxShadow:
+                    "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                  border: "1.5px solid rgba(255, 255, 255, 0.2)",
+                  minHeight: "36px",
+                  alignItems: "center",
+                  position: "relative",
+                  zIndex: 2,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: "900",
-                    color: "#ffffff",
-                    textShadow:
-                      "0 3px 8px rgba(0, 0, 0, 1), 0 0 12px rgba(255, 255, 255, 0.4)",
-                    zIndex: 2,
-                  }}
-                >
-                  #{pokemon.number}
-                </div>
-
-                <div style={{ display: "flex", gap: "6px", zIndex: 2 }}>
-                  {isShiny && (
-                    <ThunderboltFilled
-                      style={{
-                        fontSize: "22px",
-                        color: "#FFD700",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="Shiny"
-                    />
-                  )}
-                  {isShadow && (
-                    <FireOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#8B0000",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(139, 0, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="Shadow"
-                    />
-                  )}
-                  {isPurified && (
-                    <SmileOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#87CEEB",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(135, 206, 235, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="Purified"
-                    />
-                  )}
-                  {isLucky && (
-                    <StarOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#FFD700",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="Lucky"
-                    />
-                  )}
-                  {pokemon.xxl && (
-                    <GiftOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#00BFFF",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(0, 191, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="XXL"
-                    />
-                  )}
-                  {pokemon.xs && (
-                    <CheckCircleOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#32CD32",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(50, 205, 50, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="XS"
-                    />
-                  )}
-                  {pokemon.legendary && (
-                    <TrophyOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#FF6347",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="Legendary"
-                    />
-                  )}
-                  {pokemon.mythic && (
-                    <CrownOutlined
-                      style={{
-                        fontSize: "22px",
-                        color: "#9B59B6",
-                        filter:
-                          "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                      }}
-                      title="Mythical"
-                    />
-                  )}
-                </div>
+                {!isApex &&
+                !isShiny &&
+                !isShadow &&
+                !isPurified &&
+                !isLucky &&
+                !pokemon.legendary &&
+                !pokemon.mythic ? (
+                  <CheckCircleOutlined
+                    style={{
+                      fontSize: "20px",
+                      color: "#95a5a6",
+                      filter: "drop-shadow(0 0 4px rgba(149, 165, 166, 0.5))",
+                    }}
+                    title="Normal"
+                  />
+                ) : (
+                  <>
+                    {isApex && (
+                      <ThunderboltFilled
+                        style={{
+                          fontSize: "22px",
+                          color: "#FF00FF",
+                          filter:
+                            "drop-shadow(0 0 10px rgba(255, 0, 255, 1)) drop-shadow(0 0 15px rgba(0, 255, 255, 0.8)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Apex"
+                      />
+                    )}
+                    {isShiny && (
+                      <StarOutlined
+                        style={{
+                          fontSize: "22px",
+                          color: "#FFD700",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Shiny"
+                      />
+                    )}
+                    {isShadow && (
+                      <FireOutlined
+                        style={{
+                          fontSize: "22px",
+                          color: "#8B2BE2",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(138, 43, 226, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Shadow"
+                      />
+                    )}
+                    {isPurified && (
+                      <SmileOutlined
+                        style={{
+                          fontSize: "22px",
+                          color: "#FFFFFF",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 255, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Purified"
+                      />
+                    )}
+                    {isLucky && (
+                      <GiftOutlined
+                        style={{
+                          fontSize: "22px",
+                          color: "#FFA500",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 165, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Lucky"
+                      />
+                    )}
+                    {pokemon.legendary && (
+                      <TrophyOutlined
+                        style={{
+                          fontSize: "22px",
+                          color: "#FF6347",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Legendary"
+                      />
+                    )}
+                    {pokemon.mythic && (
+                      <CrownOutlined
+                        style={{
+                          fontSize: "22px",
+                          color: "#9B59B6",
+                          filter:
+                            "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                        }}
+                        title="Mythical"
+                      />
+                    )}
+                  </>
+                )}
               </div>
 
               <div
@@ -1373,9 +1396,18 @@ const DexViewer: React.FC = () => {
                       boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                     }}
                   >
-                    {pokemon.pvp_enabled && pokemon.pvp_meta_cp !== undefined
-                      ? `CP ${pokemon.cp} / ${pokemon.pvp_meta_cp}`
-                      : `CP ${pokemon.cp}`}
+                    {pvpActive && pvpCp !== undefined ? (
+                      <>
+                        <span style={{ color: "#FFFFFF" }}>CP </span>
+                        <span style={{ color: statColor(cpMatch) }}>
+                          {pokemon.cp}
+                        </span>
+                        <span style={{ color: "#FFFFFF" }}> / </span>
+                        <span style={{ color: "#52c41a" }}>{pvpCp}</span>
+                      </>
+                    ) : (
+                      `CP ${pokemon.cp}`
+                    )}
                   </Tag>
 
                   {pokemon.pvp_enabled &&
@@ -1396,7 +1428,7 @@ const DexViewer: React.FC = () => {
                         #{pokemon.pvp_meta_rank}
                       </Tag>
                     )}
-                  {(pokemon.height_label || pokemon.weight_label) && (
+                  {!pvpActive && (pokemon.height_label || pokemon.weight_label) && (
                     <Tag
                       style={{
                         margin: 0,
