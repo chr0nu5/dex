@@ -1369,7 +1369,26 @@ def get_user_files_metadata(user_id):
             }
         )
 
-    return sorted(files, key=lambda x: x["upload_date"], reverse=True)
+    files_sorted = sorted(files, key=lambda x: x["upload_date"], reverse=True)
+
+    # Dedupe entries so re-uploads don't show twice in the Select.
+    # Prefer logical (user, date) when we can extract it from filename.
+    seen: set[tuple] = set()
+    deduped = []
+    for rec in files_sorted:
+        u = rec.get("user")
+        d = rec.get("date")
+        if u and d:
+            key = (u, d)
+        else:
+            key = (rec.get("filename"),)
+
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(rec)
+
+    return deduped
 
 
 def pick_image_animated(rec: dict) -> str:
@@ -1712,7 +1731,8 @@ def upload_json():
                     except Exception:
                         continue
 
-                    if old_dt < new_dt:
+                    # Older OR same logical date => overwrite (avoid duplicates on re-upload)
+                    if old_dt <= new_dt:
                         _delete_uuid_files(fid)
                         if isinstance(idx, dict) and fid in idx:
                             idx.pop(fid, None)
