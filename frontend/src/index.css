@@ -20,6 +20,17 @@ body {
   background: url('./background.png') center center / cover no-repeat fixed;
   min-height: 100vh;
   color: #e0e0e0;
+  position: relative;
+}
+
+/* Global background darken overlay (50%) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  z-index: 0;
 }
 
 code {
@@ -29,6 +40,8 @@ code {
 
 #root {
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
 
 /* Pokemon Glow Effects - Simplified without animations */
