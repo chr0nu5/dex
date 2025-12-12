@@ -119,7 +119,9 @@ const DexViewer: React.FC = () => {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [uploadFileId, setUploadFileId] = useState<string | null>(null);
   const [uploadQueue, setUploadQueue] = useState<File[]>([]);
-  const [currentUploadName, setCurrentUploadName] = useState<string | null>(null);
+  const [currentUploadName, setCurrentUploadName] = useState<string | null>(
+    null
+  );
   const [pvpEnabled, setPvpEnabled] = useState(false);
   const [pvpLeague, setPvpLeague] = useState<"GL" | "UL" | "ML">("GL");
   const [pvpCategory, setPvpCategory] = useState("overall");
@@ -414,35 +416,38 @@ const DexViewer: React.FC = () => {
     setSnorlaxOpen(false);
   }, []);
 
-  const uploadFile = useCallback(async (file: File) => {
-    try {
-      setUploading(true);
-      setCurrentUploadName(file.name);
-      setProgress({ current: 0, total: 100, status: "uploading" });
+  const uploadFile = useCallback(
+    async (file: File) => {
+      try {
+        setUploading(true);
+        setCurrentUploadName(file.name);
+        setProgress({ current: 0, total: 100, status: "uploading" });
 
-      const response = await apiClient.uploadFile("/api/upload", file, {
-        user_id: userId,
-      });
+        const response = await apiClient.uploadFile("/api/upload", file, {
+          user_id: userId,
+        });
 
-      message.success(`Uploaded: ${response.filename}`);
+        message.success(`Uploaded: ${response.filename}`);
 
-      // Refresh the select list immediately so the new JSON appears.
-      await loadUserFiles();
+        // Refresh the select list immediately so the new JSON appears.
+        await loadUserFiles();
 
-      setUploadFileId(response.file_id);
-      setProgress({
-        current: 0,
-        total: response.total_pokemon,
-        status: "processing",
-      });
-    } catch (error: any) {
-      message.error(`Upload failed: ${error.message}`);
-      setUploading(false);
-      setProgress(null);
-      setUploadFileId(null);
-      setCurrentUploadName(null);
-    }
-  }, [loadUserFiles, userId]);
+        setUploadFileId(response.file_id);
+        setProgress({
+          current: 0,
+          total: response.total_pokemon,
+          status: "processing",
+        });
+      } catch (error: any) {
+        message.error(`Upload failed: ${error.message}`);
+        setUploading(false);
+        setProgress(null);
+        setUploadFileId(null);
+        setCurrentUploadName(null);
+      }
+    },
+    [loadUserFiles, userId]
+  );
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
