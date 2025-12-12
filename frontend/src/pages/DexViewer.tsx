@@ -841,24 +841,25 @@ const DexViewer: React.FC = () => {
                       #{pokemon.pvp_meta_rank}
                     </Tag>
                   )}
-                  {!pvpActive && (pokemon.height_label || pokemon.weight_label) && (
-                    <Tag
-                      style={{
-                        margin: 0,
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        borderRadius: "8px",
-                        padding: "4px 10px",
-                        background: "#3a2e2e",
-                        border: "1px solid #6c4a3a",
-                        color: "#cc9966",
-                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                      }}
-                    >
-                      {pokemon.height_label?.toUpperCase() ||
-                        pokemon.weight_label?.toUpperCase()}
-                    </Tag>
-                  )}
+                  {!pvpActive &&
+                    (pokemon.height_label || pokemon.weight_label) && (
+                      <Tag
+                        style={{
+                          margin: 0,
+                          fontWeight: "600",
+                          fontSize: "12px",
+                          borderRadius: "8px",
+                          padding: "4px 10px",
+                          background: "#3a2e2e",
+                          border: "1px solid #6c4a3a",
+                          color: "#cc9966",
+                          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                        }}
+                      >
+                        {pokemon.height_label?.toUpperCase() ||
+                          pokemon.weight_label?.toUpperCase()}
+                      </Tag>
+                    )}
                 </div>
               </div>
             </Card>
@@ -1428,24 +1429,25 @@ const DexViewer: React.FC = () => {
                         #{pokemon.pvp_meta_rank}
                       </Tag>
                     )}
-                  {!pvpActive && (pokemon.height_label || pokemon.weight_label) && (
-                    <Tag
-                      style={{
-                        margin: 0,
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        borderRadius: "8px",
-                        padding: "4px 10px",
-                        background: "#3a2e2e",
-                        border: "1px solid #6c4a3a",
-                        color: "#cc9966",
-                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                      }}
-                    >
-                      {pokemon.height_label?.toUpperCase() ||
-                        pokemon.weight_label?.toUpperCase()}
-                    </Tag>
-                  )}
+                  {!pvpActive &&
+                    (pokemon.height_label || pokemon.weight_label) && (
+                      <Tag
+                        style={{
+                          margin: 0,
+                          fontWeight: "600",
+                          fontSize: "12px",
+                          borderRadius: "8px",
+                          padding: "4px 10px",
+                          background: "#3a2e2e",
+                          border: "1px solid #6c4a3a",
+                          color: "#cc9966",
+                          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                        }}
+                      >
+                        {pokemon.height_label?.toUpperCase() ||
+                          pokemon.weight_label?.toUpperCase()}
+                      </Tag>
+                    )}
                 </div>
               </div>
             </Card>
