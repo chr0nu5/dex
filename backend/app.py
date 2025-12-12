@@ -33,6 +33,49 @@ for dir_name in REQUIRED_DIRS:
 META_PATH = os.path.join(os.path.dirname(__file__), "data/master.json")
 META_MAP = {}
 
+# Integer level CP multipliers (level -> cpm), extracted from master.json
+CPM_INT: dict[int, float] = {}
+
+
+def _extract_cp_multipliers_from_master_text(path: str) -> dict[int, float]:
+    """Fallback extractor for cpMultiplier using a streaming text scan.
+
+    Some environments struggle to reliably re-parse or traverse the full master.json.
+    This reads the file line-by-line and extracts the numeric cpMultiplier array under
+    PLAYER_LEVEL_SETTINGS.
+    """
+    try:
+        import re
+
+        found_settings = False
+        in_cpm = False
+        values: list[float] = []
+
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if (
+                    not found_settings
+                    and '"templateId": "PLAYER_LEVEL_SETTINGS"' in line
+                ):
+                    found_settings = True
+
+                if found_settings and (not in_cpm) and '"cpMultiplier"' in line:
+                    in_cpm = True
+
+                if in_cpm:
+                    for m in re.findall(r"\b\d+\.\d+\b", line):
+                        values.append(float(m))
+                    if "]" in line:
+                        break
+
+        if not values:
+            return {}
+
+        return {i + 1: v for i, v in enumerate(values)}
+    except Exception:
+        return {}
+
+
 # Animated images index
 ANIMATED_INDEX_PATH = Path("data/3d.txt")
 
@@ -154,6 +197,7 @@ def _form_variants_preference(form_tokens: list[str]) -> list[list[str]]:
 
 def load_meta_map():
     global META_MAP
+    global CPM_INT
     if not os.path.exists(META_PATH):
         print(f"⚠️  Warning: {META_PATH} not found. Enrichment will be limited.")
         return
@@ -162,6 +206,19 @@ def load_meta_map():
         raw_data = json.load(f)
 
     for item in raw_data:
+        # Extract CP multipliers once (PLAYER_LEVEL_SETTINGS)
+        if item.get("templateId") == "PLAYER_LEVEL_SETTINGS":
+            try:
+                pls = (
+                    item.get("data", {})
+                    .get("playerLevelSettings", {})
+                    .get("cpMultiplier")
+                )
+                if isinstance(pls, list) and pls:
+                    CPM_INT = {i + 1: float(v) for i, v in enumerate(pls)}
+            except Exception:
+                pass
+
         tid = item.get("templateId", "")
         poke = item.get("data", {}).get("pokemonSettings")
         if poke and tid.startswith("V"):
@@ -198,8 +255,715 @@ def load_meta_map():
 
     print(f"✓ Loaded {len(META_MAP)} Pokémon from master.json")
 
+    if CPM_INT:
+        print(f"✓ Loaded {len(CPM_INT)} CP multipliers from master.json")
+    else:
+        print("⚠️  Warning: CP multipliers not found in master.json")
+
 
 load_meta_map()
+
+# Fallback: if CP multipliers were not extracted via JSON traversal, do a streaming
+# text-based extraction.
+if not CPM_INT and os.path.exists(META_PATH):
+    CPM_INT = _extract_cp_multipliers_from_master_text(META_PATH)
+    if CPM_INT:
+        print(f"✓ Loaded {len(CPM_INT)} CP multipliers (fallback)")
+    else:
+        print("⚠️  Warning: CP multipliers still unavailable; PVP features disabled")
+
+# -----------------------------
+# PVP helpers
+# -----------------------------
+
+PVP_LEAGUE_CAPS = {
+    "GL": 1500,
+    "UL": 2500,
+    "ML": 10000,
+}
+
+PVP_CATEGORY_DIR = os.path.join(os.path.dirname(__file__), "data", "pvp")
+
+
+def _list_pvp_categories() -> list[str]:
+    try:
+        if not os.path.isdir(PVP_CATEGORY_DIR):
+            return ["overall"]
+        cats = []
+        for name in os.listdir(PVP_CATEGORY_DIR):
+            if name.startswith("."):
+                continue
+            p = os.path.join(PVP_CATEGORY_DIR, name)
+            if os.path.isdir(p):
+                cats.append(name.lower())
+        if "overall" not in cats:
+            cats.append("overall")
+        return sorted(set(cats))
+    except Exception:
+        return ["overall"]
+
+
+PVP_CATEGORIES = _list_pvp_categories()
+
+
+def _pvp_rankings_path(category: str, league: str) -> str:
+    # New structure: backend/data/pvp/<category>/rankings-1500.json etc
+    cap = PVP_LEAGUE_CAPS.get(league)
+    if cap:
+        candidate = os.path.join(PVP_CATEGORY_DIR, category, f"rankings-{cap}.json")
+        if os.path.exists(candidate):
+            return candidate
+
+    # Back-compat fallback: backend/data/rankings-1500.json etc
+    if cap:
+        legacy = os.path.join(os.path.dirname(__file__), "data", f"rankings-{cap}.json")
+        return legacy
+
+    return ""
+
+
+PVP_RANKINGS_CACHE: dict[tuple[str, str], list[dict]] = {}
+PVP_PREFIX_BEST_CACHE: dict[tuple[str, str], dict[str, dict | None]] = {}
+PVP_TOP10_IV_CACHE: dict[tuple[int, str | None, str], list[dict]] = {}
+
+
+def _parse_bool_arg(value: str | None) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+def _species_display_name_from_rankings(category: str, league: str) -> dict[str, str]:
+    """Build a mapping from speciesId -> display name.
+
+    Rankings JSONs in this repo may or may not include a speciesName field.
+    """
+    out: dict[str, str] = {}
+    for e in _get_pvp_rankings(category, league):
+        sid = e.get("speciesId")
+        if not sid or not isinstance(sid, str):
+            continue
+        nm = e.get("speciesName")
+        if not nm or not isinstance(nm, str):
+            nm = sid.replace("_", " ")
+        out.setdefault(sid, nm)
+        if sid.endswith("_shadow"):
+            base = sid[: -len("_shadow")]
+            out.setdefault(base, nm)
+    return out
+
+
+def compute_best_teams(
+    pokemon_list: list[dict], league: str, category: str, max_teams: int = 3
+) -> list[dict]:
+    """Suggest up to max_teams teams of 3 pokemon.
+
+    Heuristic:
+    - Candidate pool: dedupe by speciesId keeping the closest-to-meta instance.
+    - Consider top-N candidates by meta rank.
+    - Score team by (meta strength) - (uncovered shared counters penalty).
+    """
+    if league not in PVP_LEAGUE_CAPS:
+        return []
+
+    cat = (category or "overall").lower()
+    if cat not in PVP_CATEGORIES:
+        cat = "overall"
+
+    # Only consider pokemon that already have PVP annotations.
+    pool = [p for p in pokemon_list if p.get("pvp_enabled") and p.get("pvp_meta_rank")]
+    if len(pool) < 3:
+        return []
+
+    # Prefer one instance per speciesId.
+    by_sid: dict[str, dict] = {}
+    for p in pool:
+        sid = p.get("pvp_species_id")
+        if not sid or not isinstance(sid, str):
+            continue
+        prev = by_sid.get(sid)
+        if prev is None:
+            by_sid[sid] = p
+            continue
+
+        def _k(x: dict):
+            return (
+                int(x.get("pvp_distance_sum", 999999) or 999999),
+                int(x.get("pvp_distance_max", 999999) or 999999),
+                int(x.get("pvp_rank_top10", 999999) or 999999),
+                int(x.get("cp", 0) or 0),
+            )
+
+        if _k(p) < _k(prev):
+            by_sid[sid] = p
+
+    candidates = list(by_sid.values())
+
+    def _rank(p: dict) -> int:
+        try:
+            return int(p.get("pvp_meta_rank") or 999999)
+        except Exception:
+            return 999999
+
+    candidates.sort(key=_rank)
+    candidates = candidates[:30]
+    if len(candidates) < 3:
+        return []
+
+    # For display of opponents in summary cards.
+    name_map = _species_display_name_from_rankings(cat, league)
+
+    def _entry_for(p: dict) -> dict | None:
+        pref = p.get("pvp_species_prefix")
+        if not pref or not isinstance(pref, str):
+            return None
+        return best_ranking_entry_for_prefix(cat, league, pref)
+
+    def _build_matchup_map(entry: dict | None) -> dict[str, int]:
+        out: dict[str, int] = {}
+        if not entry:
+            return out
+        for m in entry.get("matchups") or []:
+            try:
+                oid = m.get("opponent")
+                if oid and isinstance(oid, str):
+                    out[oid] = int(m.get("rating", 0) or 0)
+            except Exception:
+                continue
+        return out
+
+    def _build_counters_map(entry: dict | None) -> dict[str, int]:
+        out: dict[str, int] = {}
+        if not entry:
+            return out
+        for m in entry.get("counters") or []:
+            try:
+                oid = m.get("opponent")
+                if oid and isinstance(oid, str):
+                    out[oid] = int(m.get("rating", 0) or 0)
+            except Exception:
+                continue
+        return out
+
+    # Precompute maps per candidate
+    prepared: list[dict] = []
+    for p in candidates:
+        entry = _entry_for(p)
+        prepared.append(
+            {
+                "pokemon": p,
+                "rank": _rank(p),
+                "entry": entry,
+                "matchups": _build_matchup_map(entry),
+                "counters": _build_counters_map(entry),
+            }
+        )
+
+    # Generate teams (3-combinations)
+    best: list[dict] = []
+
+    def _team_score(team: list[dict]) -> tuple[int, dict]:
+        ranks = [t["rank"] for t in team]
+        # Higher is better: invert ranks (rank starts at 1)
+        meta_score = sum(max(0, 2000 - r) for r in ranks)
+
+        # Threats: union of each member's counters
+        threats: dict[str, int] = {}
+        for t in team:
+            for oid, rating in (t["counters"] or {}).items():
+                # Lower rating is worse for us; keep minimum
+                threats[oid] = min(threats.get(oid, 999), rating)
+
+        # Coverage: a threat is covered if any member has a strong matchup vs it
+        uncovered: dict[str, int] = {}
+        for oid, worst_rating in threats.items():
+            covered = False
+            for t in team:
+                if (t["matchups"] or {}).get(oid, 0) >= 550:
+                    covered = True
+                    break
+            if not covered:
+                uncovered[oid] = worst_rating
+
+        # Strengths: union of good matchups across members
+        strengths: dict[str, int] = {}
+        for t in team:
+            for oid, rating in (t["matchups"] or {}).items():
+                if rating >= 550:
+                    strengths[oid] = max(strengths.get(oid, 0), rating)
+
+        uncovered_count = len(uncovered)
+        score = int(
+            meta_score + (len(threats) - uncovered_count) * 10 - uncovered_count * 120
+        )
+
+        # Build summary lists
+        def _nm(oid: str) -> str:
+            if oid in name_map:
+                return name_map[oid]
+            base = oid.replace("_shadow", "")
+            return name_map.get(base, oid.replace("_", " "))
+
+        strengths_list = [
+            {"id": oid, "name": _nm(oid), "rating": rt}
+            for oid, rt in sorted(strengths.items(), key=lambda kv: -kv[1])[:8]
+        ]
+        weaknesses_list = [
+            {"id": oid, "name": _nm(oid), "rating": rt}
+            for oid, rt in sorted(uncovered.items(), key=lambda kv: kv[1])[:8]
+        ]
+
+        summary = {
+            "score": score,
+            "strengths": strengths_list,
+            "weaknesses": weaknesses_list,
+        }
+        return score, summary
+
+    # Brute-force combinations of the candidate list size (<=30)
+    n = len(prepared)
+    for i in range(n - 2):
+        for j in range(i + 1, n - 1):
+            for k in range(j + 1, n):
+                team = [prepared[i], prepared[j], prepared[k]]
+                score, summary = _team_score(team)
+                best.append(
+                    {
+                        "score": score,
+                        "members": [
+                            team[0]["pokemon"],
+                            team[1]["pokemon"],
+                            team[2]["pokemon"],
+                        ],
+                        "summary": summary,
+                    }
+                )
+
+    best.sort(key=lambda t: -int(t.get("score", 0) or 0))
+
+    # Keep up to max_teams with distinct member sets
+    out: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    for t in best:
+        mem = t.get("members") or []
+        sids = []
+        for m in mem:
+            sid = m.get("pvp_species_id")
+            if sid and isinstance(sid, str):
+                sids.append(sid)
+        if len(sids) != 3:
+            continue
+        key = tuple(sorted(sids))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+        if len(out) >= max_teams:
+            break
+
+    return out
+
+
+def _get_pvp_rankings(category: str, league: str) -> list[dict]:
+    cat = (category or "overall").lower()
+    if cat not in PVP_CATEGORIES:
+        cat = "overall"
+
+    key = (cat, league)
+    if key in PVP_RANKINGS_CACHE:
+        return PVP_RANKINGS_CACHE[key]
+
+    path = _pvp_rankings_path(cat, league)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            data = []
+    except Exception:
+        data = []
+
+    PVP_RANKINGS_CACHE[key] = data
+    return data
+
+
+def get_cpm(level: float) -> float:
+    """Return CP multiplier for integer and half-levels up to 51.
+
+    Half-levels use the common interpolation:
+      cpm(L+0.5) = sqrt((cpm(L)^2 + cpm(L+1)^2)/2)
+    """
+    if not CPM_INT:
+        raise RuntimeError("CP multipliers not loaded")
+
+    if float(level).is_integer():
+        return CPM_INT.get(int(level), 0.0)
+
+    base = int(level)
+    if abs(level - (base + 0.5)) < 1e-9:
+        a = CPM_INT.get(base, 0.0)
+        b = CPM_INT.get(base + 1, 0.0)
+        if not a or not b:
+            return 0.0
+        return ((a * a + b * b) / 2.0) ** 0.5
+
+    return 0.0
+
+
+def calc_cp(
+    base_atk: int,
+    base_def: int,
+    base_sta: int,
+    iv_atk: int,
+    iv_def: int,
+    iv_sta: int,
+    cpm: float,
+) -> int:
+    atk = (base_atk + iv_atk) * cpm
+    defe = (base_def + iv_def) * cpm
+    sta = (base_sta + iv_sta) * cpm
+    # CP formula (Pokemon GO):
+    #   CP = floor(Atk * sqrt(Def) * sqrt(Sta) / 10)
+    # where Atk/Def/Sta are already scaled by the level CP multiplier.
+    cp = int((atk * (defe**0.5) * (sta**0.5)) / 10.0)
+    return max(10, cp)
+
+
+def calc_stats(
+    base_atk: int,
+    base_def: int,
+    base_sta: int,
+    iv_atk: int,
+    iv_def: int,
+    iv_sta: int,
+    cpm: float,
+) -> tuple[float, float, int, float]:
+    atk = (base_atk + iv_atk) * cpm
+    defe = (base_def + iv_def) * cpm
+    hp = int((base_sta + iv_sta) * cpm)
+    product = atk * defe * hp
+    return atk, defe, hp, product
+
+
+PVP_LEVELS: list[float] = [x / 2 for x in range(2, 103)]  # 1.0 .. 51.0 step 0.5
+
+
+def compute_top10_ivs(
+    base_atk: int, base_def: int, base_sta: int, cp_cap: int
+) -> list[dict]:
+    """Compute the top-10 IV spreads for stat product within a CP cap (levels up to 51)."""
+    if base_atk <= 0 or base_def <= 0 or base_sta <= 0:
+        return []
+
+    results: list[dict] = []
+
+    max_level = 51.0
+    max_cpm = get_cpm(max_level)
+
+    for iva in range(16):
+        for ivd in range(16):
+            for ivs in range(16):
+                # Find best (highest) level under cap; product increases with level for fixed IVs.
+                level = None
+
+                if (
+                    calc_cp(base_atk, base_def, base_sta, iva, ivd, ivs, max_cpm)
+                    <= cp_cap
+                ):
+                    level = max_level
+                else:
+                    for lv in reversed(PVP_LEVELS):
+                        cpm = get_cpm(lv)
+                        if not cpm:
+                            continue
+                        if (
+                            calc_cp(base_atk, base_def, base_sta, iva, ivd, ivs, cpm)
+                            <= cp_cap
+                        ):
+                            level = lv
+                            break
+
+                if level is None:
+                    continue
+
+                cpm = get_cpm(level)
+                atk, defe, hp, product = calc_stats(
+                    base_atk, base_def, base_sta, iva, ivd, ivs, cpm
+                )
+                results.append(
+                    {
+                        "atk_iv": iva,
+                        "def_iv": ivd,
+                        "stm_iv": ivs,
+                        "level": level,
+                        "cp": calc_cp(base_atk, base_def, base_sta, iva, ivd, ivs, cpm),
+                        "product": product,
+                        "atk": atk,
+                        "def": defe,
+                        "hp": hp,
+                    }
+                )
+
+    results.sort(
+        key=lambda r: (
+            -r["product"],
+            -r["level"],
+            r["atk_iv"],
+            -r["def_iv"],
+            -r["stm_iv"],
+        )
+    )
+    return results[:10]
+
+
+def pvp_prefix_candidates(p: dict) -> list[str]:
+    form = (p.get("form") or "").upper()
+    number = p.get("number")
+
+    # Derive base id from form when possible.
+    base = ""
+    if form:
+        if form.startswith("MR_MIME_"):
+            base = "mr_mime"
+        elif form.startswith("HO_OH_"):
+            base = "ho_oh"
+        elif form.startswith("PORYGON_Z_"):
+            base = "porygon_z"
+        else:
+            base = form.split("_")[0].lower()
+    else:
+        base = slugify_species(str(p.get("name") or "")).replace("-", "_")
+
+    def _normalize_form_suffix_token(tok: str) -> str:
+        m = {
+            "ALOLA": "alolan",
+            "ALOLAN": "alolan",
+            "GALAR": "galarian",
+            "GALARIAN": "galarian",
+            "HISUI": "hisuian",
+            "HISUIAN": "hisuian",
+            "PALDEA": "paldean",
+            "PALDEAN": "paldean",
+        }
+        return m.get(tok.upper(), tok.lower())
+
+    candidates: list[str] = []
+
+    # 1) Try full-form derived id first (e.g. GIRATINA_ORIGIN -> giratina_origin)
+    if form and base and form.startswith(base.upper() + "_"):
+        remainder = form[len(base) + 1 :]
+        if remainder and remainder != "NORMAL":
+            rem_tokens = [t for t in remainder.split("_") if t]
+            rem_norm = "_".join(_normalize_form_suffix_token(t) for t in rem_tokens)
+            if rem_norm:
+                candidates.append(f"{base}_{rem_norm}")
+
+    # 2) Regional shorthand fallback
+    if form:
+        if "ALOLA" in form:
+            candidates.append(f"{base}_alolan")
+        if "GALAR" in form:
+            candidates.append(f"{base}_galarian")
+        if "HISUI" in form:
+            candidates.append(f"{base}_hisuian")
+        if "PALDEA" in form:
+            candidates.append(f"{base}_paldean")
+
+    # 3) Finally, base species id
+    candidates.append(base)
+
+    shadow = bool(p.get("shadow"))
+    out: list[str] = []
+    if shadow:
+        for c in candidates:
+            out.append(f"{c}_shadow")
+    out.extend(candidates)
+
+    # Remove empties and duplicates while preserving order
+    seen = set()
+    uniq = []
+    for c in out:
+        if not c:
+            continue
+        if c not in seen:
+            uniq.append(c)
+            seen.add(c)
+    return uniq
+
+
+def best_ranking_entry_for_prefix(
+    category: str, league: str, prefix: str
+) -> dict | None:
+    cat = (category or "overall").lower()
+    if cat not in PVP_CATEGORIES:
+        cat = "overall"
+
+    cache = PVP_PREFIX_BEST_CACHE.setdefault((cat, league), {})
+    if prefix in cache:
+        return cache[prefix]
+
+    exact_best: tuple[dict, int] | None = None
+    boundary_best: tuple[dict, int] | None = None
+    prefix_best: tuple[dict, int] | None = None
+
+    for idx, e in enumerate(_get_pvp_rankings(cat, league), start=1):
+        sid = e.get("speciesId")
+        if not sid or not isinstance(sid, str):
+            continue
+        rating = int(e.get("rating", 0) or 0)
+
+        if sid == prefix:
+            if exact_best is None or rating > int(exact_best[0].get("rating", 0) or 0):
+                exact_best = (e, idx)
+            continue
+
+        if sid.startswith(prefix + "_"):
+            if boundary_best is None or rating > int(
+                boundary_best[0].get("rating", 0) or 0
+            ):
+                boundary_best = (e, idx)
+            continue
+
+        if sid.startswith(prefix):
+            if prefix_best is None or rating > int(
+                prefix_best[0].get("rating", 0) or 0
+            ):
+                prefix_best = (e, idx)
+
+    chosen = exact_best or boundary_best or prefix_best
+    if not chosen:
+        cache[prefix] = None
+        return None
+
+    entry, rank = chosen
+    # Rankings JSON in this repo doesn't provide an explicit "rank" field;
+    # we derive it from list order (1-based).
+    best = dict(entry)
+    best["rank"] = rank
+    cache[prefix] = best
+    return best
+
+
+def pvp_match_and_annotate(
+    p: dict, league: str, category: str = "overall", threshold: int = 2, top_n: int = 10
+) -> bool:
+    """Returns True if pokemon matches within threshold of any top-N IV spreads for its species in the league.
+
+    Mutates dict p by adding pvp_* fields when matched.
+    """
+    if league not in PVP_LEAGUE_CAPS:
+        return False
+
+    iva = p.get("attack")
+    ivd = p.get("defence")
+    ivs = p.get("stamina")
+    if iva is None or ivd is None or ivs is None:
+        return False
+
+    try:
+        iva = int(iva)
+        ivd = int(ivd)
+        ivs = int(ivs)
+    except Exception:
+        return False
+
+    base_atk = p.get("base_attack") or p.get("base_atk") or 0
+    base_def = p.get("base_defence") or p.get("base_def") or 0
+    base_sta = p.get("base_stamina") or p.get("base_sta") or 0
+    try:
+        base_atk = int(base_atk)
+        base_def = int(base_def)
+        base_sta = int(base_sta)
+    except Exception:
+        return False
+
+    prefixes = pvp_prefix_candidates(p)
+    best_prefix = None
+    best_rank_entry = None
+    for pref in prefixes:
+        entry = best_ranking_entry_for_prefix(category, league, pref)
+        if entry is not None:
+            best_prefix = pref
+            best_rank_entry = entry
+            break
+
+    # If the species isn't present in league rankings, treat it as not eligible.
+    if not best_prefix or not best_rank_entry:
+        return False
+
+    # League eligibility: in GL/UL you can't use a pokemon above the CP cap.
+    # Our IV-matching alone can otherwise include high-CP monsters that *could*
+    # be good in theory, but aren't eligible in practice.
+    try:
+        current_cp = p.get("cp")
+        if current_cp is not None:
+            current_cp_int = int(current_cp)
+            if current_cp_int > int(PVP_LEAGUE_CAPS[league]):
+                return False
+    except Exception:
+        # If CP is missing/unparseable, don't block on it.
+        pass
+
+    # Cache key per form+league (base stats depend on form)
+    cache_key = (int(p.get("number") or 0), p.get("form"), league)
+    if cache_key not in PVP_TOP10_IV_CACHE:
+        PVP_TOP10_IV_CACHE[cache_key] = compute_top10_ivs(
+            base_atk, base_def, base_sta, PVP_LEAGUE_CAPS[league]
+        )
+
+    top = PVP_TOP10_IV_CACHE.get(cache_key, [])[:top_n]
+    if not top:
+        return False
+
+    best = None
+    for idx, cand in enumerate(top, start=1):
+        da = iva - cand["atk_iv"]
+        dd = ivd - cand["def_iv"]
+        ds = ivs - cand["stm_iv"]
+        if abs(da) <= threshold and abs(dd) <= threshold and abs(ds) <= threshold:
+            score = (max(abs(da), abs(dd), abs(ds)), abs(da) + abs(dd) + abs(ds))
+            if best is None or score < best["score"]:
+                best = {
+                    "rank": idx,
+                    "cand": cand,
+                    "da": da,
+                    "dd": dd,
+                    "ds": ds,
+                    "score": score,
+                }
+
+    if best is None:
+        return False
+
+    p["pvp_enabled"] = True
+    p["pvp_league"] = league
+    p["pvp_rank_top10"] = best["rank"]
+    p["pvp_distance_max"] = int(best["score"][0])
+    p["pvp_distance_sum"] = int(best["score"][1])
+    p["pvp_delta_atk"] = best["da"]
+    p["pvp_delta_def"] = best["dd"]
+    p["pvp_delta_stm"] = best["ds"]
+    p["pvp_meta_atk"] = best["cand"]["atk_iv"]
+    p["pvp_meta_def"] = best["cand"]["def_iv"]
+    p["pvp_meta_stm"] = best["cand"]["stm_iv"]
+    p["pvp_meta_level"] = best["cand"]["level"]
+    p["pvp_meta_cp"] = best["cand"]["cp"]
+    # Best (rank-1) IV spread for this species under the league cap.
+    try:
+        best0 = top[0]
+        p["pvp_best_atk"] = best0.get("atk_iv")
+        p["pvp_best_def"] = best0.get("def_iv")
+        p["pvp_best_stm"] = best0.get("stm_iv")
+        p["pvp_best_level"] = best0.get("level")
+        p["pvp_best_cp"] = best0.get("cp")
+    except Exception:
+        pass
+    p["pvp_species_prefix"] = best_prefix
+    p["pvp_species_id"] = best_rank_entry.get("speciesId")
+    p["pvp_rating"] = best_rank_entry.get("rating")
+    p["pvp_meta_rank"] = best_rank_entry.get("rank")
+    p["pvp_category"] = (category or "overall").lower()
+    return True
+
 
 # Storage for enrichment progress
 ENRICHMENT_PROGRESS = {}
@@ -312,12 +1076,28 @@ NO_G2_FORMS = ["ALOLA", "PALDEA", "ROCK_STAR", "VS_2019", "POP_STAR"]
 def get_image_path(p):
     """Generate image path based on Pokemon attributes"""
     number = p.get("number")
-    name = p.get("name", "").upper()
     form = p.get("form")
     costume = p.get("costume")
     gender = p.get("gender", "").upper()
     shiny = p.get("shiny", False)
     height_label = p.get("height_label", "").upper()
+
+    # IMPORTANT:
+    # The sprite naming convention is based on the internal pokemonId (e.g., RATTATA)
+    # that prefixes the `form` field (e.g., RATTATA_ALOLA), not the human display name
+    # (e.g., "Alola Rattata"). Using the display name here breaks form stripping and
+    # generates non-existent filenames like `pm19.fRATTATA_ALOLA.icon.png`.
+    name = (p.get("name") or "").upper()
+    if form:
+        # Keep known multi-part pokemonIds intact
+        if form.startswith("MR_MIME_"):
+            name = "MR_MIME"
+        elif form.startswith("HO_OH_"):
+            name = "HO_OH"
+        elif form.startswith("PORYGON_Z_"):
+            name = "PORYGON_Z"
+        else:
+            name = form.split("_")[0]
 
     # APEX forms special handling (must return early with shiny if needed)
     if form == "LUGIA_S":
@@ -710,6 +1490,12 @@ def get_progress(file_id):
         file_id, {"current": 0, "total": 0, "status": "not_found"}
     )
     return jsonify(progress)
+
+
+@app.route("/api/pvp/categories", methods=["GET"])
+def get_pvp_categories():
+    """List available PvP ranking categories."""
+    return jsonify({"categories": PVP_CATEGORIES})
 
 
 @app.route("/api/file/<user_id>/<path:file_id>", methods=["DELETE"])
@@ -1130,6 +1916,12 @@ def get_file_data(user_id, file_id):
         order_by = request.args.get("order_by", "number")
         order_dir = request.args.get("order_dir", "asc")
         unique_only = request.args.get("unique", "").lower() == "true"
+        pvp_enabled = request.args.get("pvp", "").lower() == "true"
+        best_teams_enabled = _parse_bool_arg(request.args.get("best_teams"))
+        pvp_league = (request.args.get("league", "GL") or "GL").upper()
+        pvp_category = (request.args.get("category", "overall") or "overall").lower()
+        if pvp_category not in PVP_CATEGORIES:
+            pvp_category = "overall"
 
         # Apply advanced search filter
         if search:
@@ -1143,8 +1935,51 @@ def get_file_data(user_id, file_id):
             data = filter_unique_pokemon(data)
             print(f"[DEBUG] After unique filter: {len(data)} pokemon")
 
+        # Apply PVP filter if requested (Best Teams implies PVP)
+        if best_teams_enabled:
+            pvp_enabled = True
+
+        if pvp_enabled:
+            if pvp_league not in PVP_LEAGUE_CAPS:
+                pvp_league = "GL"
+            filtered = []
+            for p in data:
+                if pvp_match_and_annotate(
+                    p,
+                    pvp_league,
+                    category=pvp_category,
+                    threshold=2,
+                    top_n=10,
+                ):
+                    filtered.append(p)
+            data = filtered
+            print(f"[DEBUG] After PVP filter ({pvp_league}): {len(data)} pokemon")
+
+            # In PVP mode we sort primarily by meta rank (lower is better).
+            # Tie-break using how close the IVs are to the nearest top-10 spread.
+            def _pvp_rank(v):
+                try:
+                    return int(v)
+                except Exception:
+                    return 999999
+
+            data.sort(
+                key=lambda p: (
+                    _pvp_rank(p.get("pvp_meta_rank")),
+                    p.get("pvp_rank_top10", 999),
+                    p.get("pvp_distance_max", 999),
+                    p.get("pvp_distance_sum", 9999),
+                    p.get("number", 0),
+                )
+            )
+
         # Apply sorting
         reverse = order_dir == "desc"
+
+        # If PVP is enabled, we've already applied our dedicated sort above.
+        if pvp_enabled:
+            reverse = False
+            order_by = "number"
 
         # Define sort key functions for different fields
         def get_sort_key(pokemon):
@@ -1168,7 +2003,17 @@ def get_file_data(user_id, file_id):
                 return pokemon.get("stamina", 0)
             return 0
 
-        data.sort(key=get_sort_key, reverse=reverse)
+        if not pvp_enabled:
+            data.sort(key=get_sort_key, reverse=reverse)
+
+        # Recompute image paths on read to keep them consistent with the current
+        # filename-generation rules (avoids needing to re-enrich old uploads).
+        for p in data:
+            try:
+                p["image"] = get_image_path(p)
+            except Exception:
+                # Keep whatever is already present if something unexpected happens
+                pass
 
         # Get file metadata
         original_path = os.path.join(user_dir, f"{file_id}.json")
@@ -1186,6 +2031,21 @@ def get_file_data(user_id, file_id):
                 "size": stat.st_size,
                 "total_pokemon": len(data),
             }
+
+        if best_teams_enabled:
+            teams = compute_best_teams(data, pvp_league, pvp_category, max_teams=3)
+            return jsonify(
+                {
+                    "metadata": file_metadata,
+                    "pokemon": [],
+                    "teams": teams,
+                    "best_teams": {
+                        "league": pvp_league,
+                        "category": pvp_category,
+                        "pool_size": len(data),
+                    },
+                }
+            )
 
         return jsonify({"metadata": file_metadata, "pokemon": data})
 
