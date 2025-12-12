@@ -1,7 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "antd";
+import { HomeOutlined } from "@ant-design/icons";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import html2canvas from "html2canvas";
+
+const TILE_WIDTH = 392;
+const TILE_HEIGHT = 900;
+const TILE_GAP = 25;
 
 const defaultCorners = {
   tl: { x: 0.09, y: 0.01 },
@@ -26,8 +33,8 @@ const DistortedPlane: React.FC<DistortedPlaneProps> = ({ image, corners }) => {
     const pos = geometry.attributes.position;
 
     const relToAbs = (pt: { x: number; y: number }) => ({
-      x: pt.x * 392,
-      y: pt.y * 900,
+      x: pt.x * TILE_WIDTH,
+      y: pt.y * TILE_HEIGHT,
     });
 
     const tl = relToAbs(corners.tl);
@@ -51,8 +58,8 @@ const DistortedPlane: React.FC<DistortedPlaneProps> = ({ image, corners }) => {
         (1 - u) * v * bl.y +
         u * v * br.y;
 
-      const px = pos.getX(i) + dx / 392;
-      const py = pos.getY(i) - dy / 900;
+      const px = pos.getX(i) + dx / TILE_WIDTH;
+      const py = pos.getY(i) - dy / TILE_HEIGHT;
 
       pos.setXYZ(i, px, py, 0);
     }
@@ -62,7 +69,7 @@ const DistortedPlane: React.FC<DistortedPlaneProps> = ({ image, corners }) => {
   }, [corners]);
 
   return (
-    <mesh ref={meshRef} scale={[392, 900, 1]}>
+    <mesh ref={meshRef} scale={[TILE_WIDTH, TILE_HEIGHT, 1]}>
       <planeGeometry args={[1, 1, 100, 100]} />
       <meshBasicMaterial map={texture} transparent toneMapped={false} />
     </mesh>
@@ -86,6 +93,7 @@ const Scene: React.FC<SceneProps> = ({ image }) => {
 };
 
 const GeneratorPage: React.FC = () => {
+  const navigate = useNavigate();
   const [images, setImages] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -191,12 +199,34 @@ const GeneratorPage: React.FC = () => {
     setIsDragOver(false);
   };
 
-  // Calculate grid layout to fit images in a square-ish grid
+  // Choose cols/rows that make the final exported image as close to square as possible,
+  // accounting for the tall iPhone tile aspect ratio.
   const getGridLayout = (count: number) => {
     if (count === 0) return { cols: 0, rows: 0 };
-    const cols = Math.ceil(Math.sqrt(count));
-    const rows = Math.ceil(count / cols);
-    return { cols, rows };
+
+    const maxCols = Math.min(count, 12);
+    let best = { cols: 1, rows: count, score: Number.POSITIVE_INFINITY };
+
+    for (let cols = 1; cols <= maxCols; cols++) {
+      const rows = Math.ceil(count / cols);
+      const width = cols * TILE_WIDTH + Math.max(0, cols - 1) * TILE_GAP;
+      const height = rows * TILE_HEIGHT + Math.max(0, rows - 1) * TILE_GAP;
+
+      const squareDiff = Math.abs(width - height) / Math.max(width, height);
+      const empty = cols * rows - count;
+
+      // Prioritize squareness; lightly penalize wasted slots.
+      const score = squareDiff + empty * 0.02;
+
+      if (
+        score < best.score ||
+        (score === best.score && empty < best.cols * best.rows - count)
+      ) {
+        best = { cols, rows, score };
+      }
+    }
+
+    return { cols: best.cols, rows: best.rows };
   };
 
   const { cols, rows } = getGridLayout(images.length);
@@ -215,6 +245,26 @@ const GeneratorPage: React.FC = () => {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
+      <Button
+        icon={<HomeOutlined />}
+        onClick={() => navigate("/")}
+        style={{
+          position: "fixed",
+          top: 16,
+          left: 16,
+          background: "linear-gradient(145deg, #2d2d44, #3a3a54)",
+          border: "1px solid #4a4a6a",
+          color: "#e0e0e0",
+          height: "48px",
+          borderRadius: "12px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minWidth: "48px",
+          zIndex: 50,
+        }}
+      />
+
       {images.length === 0 ? (
         <div
           style={{
@@ -250,9 +300,9 @@ const GeneratorPage: React.FC = () => {
           ref={wrapperRef}
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(${cols}, 392px)`,
-            gridTemplateRows: `repeat(${rows}, 900px)`,
-            gap: "25px",
+            gridTemplateColumns: `repeat(${cols}, ${TILE_WIDTH}px)`,
+            gridTemplateRows: `repeat(${rows}, ${TILE_HEIGHT}px)`,
+            gap: `${TILE_GAP}px`,
             justifyItems: "center",
             alignItems: "center",
           }}
@@ -268,8 +318,8 @@ const GeneratorPage: React.FC = () => {
               <div
                 key={index}
                 style={{
-                  width: "392px",
-                  height: "900px",
+                  width: `${TILE_WIDTH}px`,
+                  height: `${TILE_HEIGHT}px`,
                   position: "relative",
                   overflow: "hidden",
                   perspective: "1600px",
@@ -282,7 +332,12 @@ const GeneratorPage: React.FC = () => {
                     : "auto",
                 }}
               >
-                <div style={{ width: "392px", height: "900px" }}>
+                <div
+                  style={{
+                    width: `${TILE_WIDTH}px`,
+                    height: `${TILE_HEIGHT}px`,
+                  }}
+                >
                   <Scene image={src} />
                 </div>
                 <img
@@ -290,8 +345,8 @@ const GeneratorPage: React.FC = () => {
                   alt="frame"
                   style={{
                     position: "absolute",
-                    width: "392px",
-                    height: "900px",
+                    width: `${TILE_WIDTH}px`,
+                    height: `${TILE_HEIGHT}px`,
                     top: 0,
                     left: 0,
                     pointerEvents: "none",

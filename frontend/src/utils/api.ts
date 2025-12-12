@@ -1,10 +1,21 @@
+import { loadingTracker } from "./loading";
+
 // When served by Flask backend, use relative URLs. In dev mode, proxy handles it.
 const API_URL =
   process.env.NODE_ENV === "development" ? "http://localhost:5001" : "";
 
+const trackedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  loadingTracker.start();
+  try {
+    return await fetch(input, init);
+  } finally {
+    loadingTracker.stop();
+  }
+};
+
 export const apiClient = {
   async get(endpoint: string) {
-    const response = await fetch(`${API_URL}${endpoint}`);
+    const response = await trackedFetch(`${API_URL}${endpoint}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -12,7 +23,7 @@ export const apiClient = {
   },
 
   async post(endpoint: string, data?: any) {
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    const response = await trackedFetch(`${API_URL}${endpoint}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -40,7 +51,7 @@ export const apiClient = {
       });
     }
 
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    const response = await trackedFetch(`${API_URL}${endpoint}`, {
       method: "POST",
       body: formData,
     });
@@ -97,9 +108,12 @@ export const apiClient = {
   },
 
   async deleteFile(userId: string, fileId: string) {
-    const response = await fetch(`${API_URL}/api/file/${userId}/${fileId}`, {
-      method: "DELETE",
-    });
+    const response = await trackedFetch(
+      `${API_URL}/api/file/${userId}/${fileId}`,
+      {
+        method: "DELETE",
+      }
+    );
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

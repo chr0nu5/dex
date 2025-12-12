@@ -413,6 +413,12 @@ def compute_best_teams(
     # For display of opponents in summary cards.
     name_map = _species_display_name_from_rankings(cat, league)
 
+    # Thresholds for matchup ratings.
+    # Keep strengths somewhat permissive, but require a higher bar to consider a threat "covered"
+    # so the Weak list highlights more relevant gaps.
+    GOOD_MATCHUP_THRESHOLD = 550
+    COVERAGE_THRESHOLD = 550
+
     def _entry_for(p: dict) -> dict | None:
         pref = p.get("pvp_species_prefix")
         if not pref or not isinstance(pref, str):
@@ -479,7 +485,7 @@ def compute_best_teams(
         for oid, worst_rating in threats.items():
             covered = False
             for t in team:
-                if (t["matchups"] or {}).get(oid, 0) >= 550:
+                if (t["matchups"] or {}).get(oid, 0) >= COVERAGE_THRESHOLD:
                     covered = True
                     break
             if not covered:
@@ -489,7 +495,7 @@ def compute_best_teams(
         strengths: dict[str, int] = {}
         for t in team:
             for oid, rating in (t["matchups"] or {}).items():
-                if rating >= 550:
+                if rating >= GOOD_MATCHUP_THRESHOLD:
                     strengths[oid] = max(strengths.get(oid, 0), rating)
 
         uncovered_count = len(uncovered)

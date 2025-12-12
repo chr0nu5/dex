@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import DexPage from "./pages/DexPage";
 import GeneratorPage from "./pages/GeneratorPage";
 import DexViewer from "./pages/DexViewer";
+import LoadingOverlay from "./components/LoadingOverlay";
 import "./App.css";
 
 const App: React.FC = () => {
@@ -19,6 +20,7 @@ const App: React.FC = () => {
     >
       <Router>
         <div className="App">
+          <LoadingOverlay />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/dex" element={<DexPage />} />

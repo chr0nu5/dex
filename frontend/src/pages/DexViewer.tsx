@@ -1458,11 +1458,14 @@ const DexViewer: React.FC = () => {
     [speciesTallestByDex]
   );
 
-  const renderTeamSummaryCard = useCallback((team: any) => {
+  const renderTeamSummaryCards = useCallback((team: any) => {
     const strengths = team?.summary?.strengths || [];
     const weaknesses = team?.summary?.weaknesses || [];
 
-    return (
+    const renderOne = (
+      title: "Strong" | "Weak",
+      items: Array<{ id: string; name: string }>
+    ) => (
       <div
         style={{
           width: CARD_WIDTH + GAP,
@@ -1478,8 +1481,11 @@ const DexViewer: React.FC = () => {
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
-            background: "linear-gradient(145deg, #2d2d44, #3a3a54)",
-            borderColor: "#4a4a6a",
+            background:
+              title === "Strong"
+                ? "linear-gradient(145deg, #1f3a2a, #2d4a2e)"
+                : "linear-gradient(145deg, #3a1f1f, #4a2e2e)",
+            borderColor: title === "Strong" ? "#4a7c4d" : "#7c4a4a",
             position: "relative",
           }}
         >
@@ -1491,7 +1497,9 @@ const DexViewer: React.FC = () => {
               right: 0,
               bottom: 0,
               background:
-                "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
+                title === "Strong"
+                  ? "linear-gradient(to bottom, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.40) 100%), radial-gradient(circle at 20% 10%, rgba(136, 204, 136, 0.12), transparent 55%)"
+                  : "linear-gradient(to bottom, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.40) 100%), radial-gradient(circle at 20% 10%, rgba(204, 136, 136, 0.12), transparent 55%)",
               pointerEvents: "none",
               zIndex: 1,
             }}
@@ -1522,98 +1530,43 @@ const DexViewer: React.FC = () => {
                 zIndex: 2,
               }}
             >
+              {/* Title using the same badge strip container as normal cards */}
               <div style={{ display: "flex", justifyContent: "center" }}>
-                <Tag
+                <div
                   style={{
-                    margin: 0,
-                    fontWeight: "600",
-                    fontSize: "12px",
-                    borderRadius: "8px",
-                    padding: "4px 10px",
-                    background: "#1e1e2e",
-                    border: "1px solid #3a3a54",
-                    color: "#e0e0e0",
-                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                    display: "inline-flex",
+                    gap: "8px",
+                    justifyContent: "center",
+                    background: "rgba(0, 0, 0, 0.85)",
+                    borderRadius: "20px",
+                    padding: "8px 14px",
+                    boxShadow:
+                      "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                    border: "1.5px solid rgba(255, 255, 255, 0.2)",
+                    minHeight: "36px",
+                    alignItems: "center",
+                    position: "relative",
+                    zIndex: 2,
                   }}
                 >
-                  Team Summary
-                </Tag>
-              </div>
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                <Tag
-                  style={{
-                    margin: 0,
-                    fontWeight: "700",
-                    fontSize: "12px",
-                    borderRadius: "8px",
-                    padding: "4px 10px",
-                    background: "#2d4a2e",
-                    border: "1px solid #4a7c4d",
-                    color: "#88cc88",
-                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                  }}
-                >
-                  Strong
-                </Tag>
-                {strengths.length ? (
-                  strengths.map((s: any) => (
-                    <Tag
-                      key={s.id}
-                      style={{
-                        margin: 0,
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        borderRadius: "8px",
-                        padding: "4px 10px",
-                        background: "#1e1e2e",
-                        border: "1px solid #3a3a54",
-                        color: "#e0e0e0",
-                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                      }}
-                    >
-                      {s.name}
-                    </Tag>
-                  ))
-                ) : (
-                  <Tag
+                  <span
                     style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background: "#1e1e2e",
-                      border: "1px solid #3a3a54",
-                      color: "#e0e0e0",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      fontWeight: "800",
+                      fontSize: "14px",
+                      color: "#ffffff",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    —
-                  </Tag>
-                )}
+                    {title}
+                  </span>
+                </div>
               </div>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                <Tag
-                  style={{
-                    margin: 0,
-                    fontWeight: "700",
-                    fontSize: "12px",
-                    borderRadius: "8px",
-                    padding: "4px 10px",
-                    background: "#4a2e2e",
-                    border: "1px solid #7c4a4a",
-                    color: "#cc8888",
-                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                  }}
-                >
-                  Weak
-                </Tag>
-                {weaknesses.length ? (
-                  weaknesses.map((w: any) => (
+                {items.length ? (
+                  items.map((it: any) => (
                     <Tag
-                      key={w.id}
+                      key={it.id}
                       style={{
                         margin: 0,
                         fontWeight: "600",
@@ -1626,7 +1579,7 @@ const DexViewer: React.FC = () => {
                         boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                       }}
                     >
-                      {w.name}
+                      {it.name}
                     </Tag>
                   ))
                 ) : (
@@ -1651,6 +1604,13 @@ const DexViewer: React.FC = () => {
           </Card>
         </div>
       </div>
+    );
+
+    return (
+      <>
+        {renderOne("Strong", strengths)}
+        {renderOne("Weak", weaknesses)}
+      </>
     );
   }, []);
 
@@ -1930,7 +1890,7 @@ const DexViewer: React.FC = () => {
                     {renderPokemonCardStandalone(m)}
                   </React.Fragment>
                 ))}
-                {renderTeamSummaryCard(t)}
+                {renderTeamSummaryCards(t)}
               </div>
             ))}
           </div>
