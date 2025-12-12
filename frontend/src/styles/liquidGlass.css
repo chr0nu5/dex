@@ -192,6 +192,63 @@ select.liquid-glass-select {
   background: rgba(85, 85, 255, 0.18) !important;
 }
 
+/* Ant Design Popconfirm (darkmode / liquid glass) */
+.liquid-glass-popconfirm.ant-popover {
+  --lg-pop-bg: #1e1e2e;
+  --lg-pop-border: #2d2d44;
+  --lg-pop-text: #e0e0e0;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-popover-inner {
+  background: linear-gradient(145deg, #1e1e2e, #25253a) !important;
+  border: 1px solid #2d2d44 !important;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-popover-title,
+.liquid-glass-popconfirm.ant-popover .ant-popconfirm-title {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-popover-inner-content,
+.liquid-glass-popconfirm.ant-popover .ant-popconfirm-description {
+  color: #b0b0c0 !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-btn {
+  border-radius: 10px !important;
+  height: 34px !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-btn-default {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: #3a3a54 !important;
+  color: #e0e0e0 !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: #4a4a6a !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-btn-dangerous {
+  background: #ff4d4f !important;
+  border-color: #ff4d4f !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-btn-dangerous:hover {
+  background: #ff7875 !important;
+  border-color: #ff7875 !important;
+}
+
+.liquid-glass-popconfirm.ant-popover .ant-popover-arrow:before {
+  background: linear-gradient(145deg, #1e1e2e, #25253a) !important;
+}
+
 select.liquid-glass-select:hover {
   background: #2d2d44;
   border-color: #4a4a6a;

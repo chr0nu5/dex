@@ -1640,6 +1640,96 @@ def upload_json():
         except Exception:
             pass
 
+        # Keep only the newest export per logical "user" inside the filename.
+        # Example: Pokemons-JaspionHunter-02-12-2025.json then Pokemons-JaspionHunter-12-12-2025.json
+        # => keep the newest date, remove older ones.
+        if user and date:
+            try:
+                new_dt = datetime.fromisoformat(date)
+            except Exception:
+                new_dt = None
+
+            if new_dt is not None:
+
+                def _safe_read_meta(fid: str) -> dict:
+                    try:
+                        mp = os.path.join(user_dir, f"{fid}.meta.json")
+                        if os.path.exists(mp):
+                            with open(mp, "r", encoding="utf-8") as f:
+                                loaded = json.load(f)
+                            return loaded if isinstance(loaded, dict) else {}
+                    except Exception:
+                        pass
+                    return {}
+
+                def _delete_uuid_files(fid: str) -> None:
+                    for fn in [
+                        f"{fid}.json",
+                        f"{fid}_enriched.json",
+                        f"{fid}.meta.json",
+                    ]:
+                        fp = os.path.join(user_dir, fn)
+                        try:
+                            if os.path.exists(fp):
+                                os.remove(fp)
+                        except Exception:
+                            pass
+
+                # Load public index once (best-effort)
+                idx = None
+                try:
+                    public_index_path = os.path.join(
+                        os.path.dirname(__file__), "uploads", "public_index.json"
+                    )
+                    if os.path.exists(public_index_path):
+                        with open(public_index_path, "r", encoding="utf-8") as f:
+                            loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            idx = loaded
+                except Exception:
+                    idx = None
+
+                changed_idx = False
+
+                for fn in os.listdir(user_dir):
+                    if not fn.endswith(".meta.json"):
+                        continue
+                    fid = fn[: -len(".meta.json")]
+                    if fid == file_uuid:
+                        continue
+
+                    meta = _safe_read_meta(fid)
+                    orig = meta.get("original_filename")
+                    if not orig or not isinstance(orig, str):
+                        continue
+
+                    old_user, old_date = extract_metadata_from_filename(orig)
+                    if old_user != user or not old_date:
+                        continue
+
+                    try:
+                        old_dt = datetime.fromisoformat(old_date)
+                    except Exception:
+                        continue
+
+                    if old_dt < new_dt:
+                        _delete_uuid_files(fid)
+                        if isinstance(idx, dict) and fid in idx:
+                            idx.pop(fid, None)
+                            changed_idx = True
+
+                if changed_idx and isinstance(idx, dict):
+                    try:
+                        public_index_path = os.path.join(
+                            os.path.dirname(__file__), "uploads", "public_index.json"
+                        )
+                        tmp = f"{public_index_path}.tmp"
+                        with open(tmp, "w", encoding="utf-8") as f:
+                            json.dump(idx, f, indent=2)
+                        os.replace(tmp, public_index_path)
+                    except Exception:
+                        pass
+
         return jsonify(
             {
                 "message": "File uploaded and enriched successfully",

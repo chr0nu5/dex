@@ -7,7 +7,16 @@ import React, {
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FixedSizeGrid as Grid } from "react-window";
-import { Tag, Card, Button, Switch, message, Progress, Select } from "antd";
+import {
+  Tag,
+  Card,
+  Button,
+  Switch,
+  message,
+  Progress,
+  Select,
+  Popconfirm,
+} from "antd";
 import {
   ThunderboltOutlined,
   SafetyOutlined,
@@ -21,6 +30,7 @@ import {
   CheckCircleOutlined,
   HomeOutlined,
   ThunderboltFilled,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import { getUserId } from "../utils/userId";
 import { apiClient } from "../utils/api";
@@ -108,6 +118,8 @@ const DexViewer: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [uploadFileId, setUploadFileId] = useState<string | null>(null);
+  const [uploadQueue, setUploadQueue] = useState<File[]>([]);
+  const [currentUploadName, setCurrentUploadName] = useState<string | null>(null);
   const [pvpEnabled, setPvpEnabled] = useState(false);
   const [pvpLeague, setPvpLeague] = useState<"GL" | "UL" | "ML">("GL");
   const [pvpCategory, setPvpCategory] = useState("overall");
@@ -190,6 +202,7 @@ const DexViewer: React.FC = () => {
         if (prog.status === "completed") {
           setUploading(false);
           setProgress(null);
+          setCurrentUploadName(null);
 
           // Refresh select list and open the newly uploaded file.
           await loadUserFiles();
@@ -204,6 +217,18 @@ const DexViewer: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [uploadFileId, uploading, navigate, loadUserFiles]);
+
+  // Process Snorlax drop uploads sequentially (queue)
+  useEffect(() => {
+    if (uploading) return;
+    if (uploadFileId) return;
+    if (uploadQueue.length === 0) return;
+
+    const next = uploadQueue[0];
+    setUploadQueue((q) => q.slice(1));
+    void uploadFile(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadQueue, uploading, uploadFileId]);
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -309,7 +334,26 @@ const DexViewer: React.FC = () => {
   }, []);
 
   const fileSelectOptions = useMemo(() => {
-    const opts = userFiles.map((file) => ({
+    const sorted = [...userFiles].sort((a, b) => {
+      const au = (a.user || "").toString().toLowerCase();
+      const bu = (b.user || "").toString().toLowerCase();
+
+      // Primary: user name alphabetical
+      const userCmp = au.localeCompare(bu, "pt-BR", { sensitivity: "base" });
+      if (userCmp !== 0) return userCmp;
+
+      // Secondary: date desc when available
+      const ad = a.date ? Date.parse(a.date) : 0;
+      const bd = b.date ? Date.parse(b.date) : 0;
+      if (ad !== bd) return bd - ad;
+
+      // Fallback: filename
+      return (a.filename || "").localeCompare(b.filename || "", "pt-BR", {
+        sensitivity: "base",
+      });
+    });
+
+    const opts = sorted.map((file) => ({
       value: file.file_id,
       label: getFileDisplayName(file),
     }));
@@ -326,6 +370,38 @@ const DexViewer: React.FC = () => {
     return opts;
   }, [userFiles, getFileDisplayName, fileId, fileData]);
 
+  const canDeleteSelectedFile = useMemo(() => {
+    if (!fileId) return false;
+    // Only allow delete if it's one of the user's own files (not a shared/public one).
+    return userFiles.some((f) => f.file_id === fileId);
+  }, [fileId, userFiles]);
+
+  const handleDeleteSelectedFile = useCallback(async () => {
+    if (!fileId) return;
+    if (!canDeleteSelectedFile) return;
+
+    const file = userFiles.find((f) => f.file_id === fileId);
+    const display = file ? getFileDisplayName(file) : fileId;
+
+    try {
+      await apiClient.deleteFile(userId, fileId);
+      message.success(`Deleted: ${display}`);
+      await loadUserFiles();
+      navigate("/dex");
+      setFileData(null);
+    } catch (error: any) {
+      message.error(`Failed to delete: ${error?.message || "unknown error"}`);
+    }
+  }, [
+    fileId,
+    canDeleteSelectedFile,
+    userFiles,
+    getFileDisplayName,
+    userId,
+    loadUserFiles,
+    navigate,
+  ]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -338,9 +414,10 @@ const DexViewer: React.FC = () => {
     setSnorlaxOpen(false);
   }, []);
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = useCallback(async (file: File) => {
     try {
       setUploading(true);
+      setCurrentUploadName(file.name);
       setProgress({ current: 0, total: 100, status: "uploading" });
 
       const response = await apiClient.uploadFile("/api/upload", file, {
@@ -363,8 +440,9 @@ const DexViewer: React.FC = () => {
       setUploading(false);
       setProgress(null);
       setUploadFileId(null);
+      setCurrentUploadName(null);
     }
-  };
+  }, [loadUserFiles, userId]);
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -372,19 +450,26 @@ const DexViewer: React.FC = () => {
       setIsDragOver(false);
       setSnorlaxOpen(false);
 
-      const files = e.dataTransfer.files;
-      if (files.length === 0) {
+      const dropped = Array.from(e.dataTransfer.files || []);
+      if (dropped.length === 0) {
         message.error("No file was dropped!");
         return;
       }
 
-      const file = files[0];
-      if (!file.name.endsWith(".json")) {
-        message.error("Please upload a JSON file!");
+      const jsonFiles = dropped.filter((f) => f.name.endsWith(".json"));
+      const skipped = dropped.length - jsonFiles.length;
+
+      if (jsonFiles.length === 0) {
+        message.error("Please upload JSON files!");
         return;
       }
 
-      await uploadFile(file);
+      if (skipped > 0) {
+        message.warning(`Skipped ${skipped} non-JSON file(s)`);
+      }
+
+      setUploadQueue((q) => [...q, ...jsonFiles]);
+      message.success(`Queued ${jsonFiles.length} file(s)`);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [userId]
@@ -399,6 +484,9 @@ const DexViewer: React.FC = () => {
     setOrderBy(field);
     setOrderDir(direction);
   };
+
+  // used only for UI messaging in the Snorlax dropzone
+  void currentUploadName;
 
   // Calculate tallest height per species for proportional image sizing
   const speciesTallestByDex = useMemo(() => {
@@ -642,6 +730,7 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
+                      color: "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
                     }}
@@ -679,6 +768,7 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
+                      color: "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
                     }}
@@ -716,6 +806,7 @@ const DexViewer: React.FC = () => {
                     style={{
                       fontSize: "15px",
                       fontWeight: "800",
+                      color: "#FFFFFF",
                       textShadow:
                         "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
                     }}
@@ -1830,6 +1921,46 @@ const DexViewer: React.FC = () => {
           style={{ minWidth: 240, height: 48 }}
           popupClassName="liquid-glass-select-dropdown"
         />
+
+        <Popconfirm
+          title="Delete JSON"
+          description="Are you sure you want to delete this JSON?"
+          onConfirm={handleDeleteSelectedFile}
+          okText="Yes"
+          cancelText="No"
+          okButtonProps={{
+            danger: true,
+            style: { background: "#ff4d4f", borderColor: "#ff4d4f" },
+          }}
+          overlayClassName="liquid-glass-popconfirm"
+          disabled={!canDeleteSelectedFile}
+        >
+          <Button
+            icon={<DeleteOutlined />}
+            danger
+            disabled={!canDeleteSelectedFile}
+            style={{
+              height: "48px",
+              borderRadius: "12px",
+              minWidth: "48px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid #ff4d4f",
+              color: "#ff4d4f",
+              background: "rgba(255, 77, 79, 0.08)",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!canDeleteSelectedFile) return;
+              e.currentTarget.style.boxShadow =
+                "0 4px 12px rgba(255, 77, 79, 0.25)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          />
+        </Popconfirm>
 
         <input
           type="text"
