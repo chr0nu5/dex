@@ -205,9 +205,7 @@ def _is_false_positive_gigantamax_record(record: dict) -> bool:
     if isinstance(src, dict):
         disp2 = src.get("display")
         if isinstance(disp2, dict):
-            if _is_false_positive_gigantamax_display_form(
-                str(disp2.get("form") or "")
-            ):
+            if _is_false_positive_gigantamax_display_form(str(disp2.get("form") or "")):
                 return True
         pokemon_enum_raw2 = _strip_known_prefix(
             str(src.get("pokemon") or ""),
@@ -1382,9 +1380,9 @@ def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
     # Best-effort internal form token (used by our sprite naming logic).
     display = rec.get("display") if isinstance(rec.get("display"), dict) else {}
     display_form_full = str(display.get("form") or "")
-    ignore_gmax = _is_false_positive_gigantamax_record(rec) or _is_false_positive_gigantamax_display_form(
-        display_form_full
-    )
+    ignore_gmax = _is_false_positive_gigantamax_record(
+        rec
+    ) or _is_false_positive_gigantamax_display_form(display_form_full)
     form_raw = _strip_known_prefix(
         str(display.get("form") or ""),
         ["PokemonDisplayProto_Form_"],
