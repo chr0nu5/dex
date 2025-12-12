@@ -102,6 +102,67 @@ const CARD_WIDTH = 240;
 const CARD_HEIGHT = 380;
 const GAP = 48;
 
+const TYPE_BG_ALLOWED = new Set([
+  "bug",
+  "dark",
+  "dragon",
+  "electric",
+  "fairy",
+  "fighting",
+  "fire",
+  "flying",
+  "ghost",
+  "grass",
+  "ground",
+  "ice",
+  "normal",
+  "poison",
+  "psychic",
+  "rock",
+  "steel",
+  "water",
+  "default",
+]);
+
+const getTypeBackgroundUrl = (pokemon: any): string => {
+  const t0 = (pokemon?.types || [])[0];
+  const typeKey = TYPE_BG_ALLOWED.has(String(t0 || "").toLowerCase())
+    ? String(t0).toLowerCase()
+    : "default";
+  return `/img/backgrounds/types/details_type_bg_${typeKey}.png`;
+};
+
+type PokeballMeta = { url: string; label: string };
+
+const getPokeballMeta = (pokemon: any): PokeballMeta | null => {
+  const idRaw = pokemon?.pokeball_id ?? pokemon?.pokeballId;
+  const id = typeof idRaw === "number" ? idRaw : Number(idRaw);
+  const raw = String(pokemon?.pokeball ?? "").toLowerCase();
+
+  // Prefer explicit IDs when present.
+  if (id === 4 || raw.includes("master")) {
+    return { url: "/img/icons/masterball_sprite.png", label: "Master Ball" };
+  }
+  if (id === 3 || raw.includes("ultra")) {
+    return { url: "/img/icons/ultraball_sprite.png", label: "Ultra Ball" };
+  }
+  if (id === 2 || raw.includes("great")) {
+    return { url: "/img/icons/greatball_sprite.png", label: "Great Ball" };
+  }
+  if (raw.includes("wild")) {
+    return { url: "/img/icons/wildball_sprite.png", label: "Wild Ball" };
+  }
+  if (id === 1 || raw.includes("pokeball")) {
+    return { url: "/img/icons/pokeball_sprite.png", label: "Poké Ball" };
+  }
+  if (id === 5 || raw.includes("premier")) {
+    return { url: "/img/icons/premierball_sprite.png", label: "Poké Ball" };
+  }
+
+  // No supported icon (e.g. Premier Ball) -> hide.
+  return null;
+};
+
 const DexViewer: React.FC = () => {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
@@ -549,6 +610,10 @@ const DexViewer: React.FC = () => {
       const isLucky = pokemon.lucky || false;
       const isPurified = pokemon.purified || false;
       const isApex = pokemon.apex || false;
+      const isDynamax = Boolean(pokemon.dynamax);
+      const isGigantamax = Boolean(pokemon.gigantamax);
+
+      const pokeballMeta = getPokeballMeta(pokemon);
 
       const pvpActive = Boolean(pvpEnabled && pokemon.pvp_enabled);
       const pvpAtk = pokemon.pvp_meta_atk;
@@ -581,6 +646,7 @@ const DexViewer: React.FC = () => {
       );
       const typeGradient = getTypeGradient(types);
       const typeBorder = getTypeBorderColor(types);
+      const typeBgUrl = getTypeBackgroundUrl(pokemon);
 
       return (
         <div
@@ -591,509 +657,502 @@ const DexViewer: React.FC = () => {
           }}
         >
           <div
-            className={`pokemon-card ${
-              isApex
-                ? "apex-card"
-                : isShiny
-                ? "shiny-card"
-                : isShadow
-                ? "shadow-card"
-                : isPurified
-                ? "purified-card"
-                : ""
-            }`}
+            className="pokemon-card-wrapper"
             style={{
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-              background:
-                isApex || isShiny || isShadow || isPurified
-                  ? undefined
-                  : typeGradient,
-              borderColor:
-                isApex || isShiny || isShadow || isPurified
-                  ? undefined
-                  : typeBorder,
               position: "relative",
+              height: "100%",
+              overflow: "visible",
             }}
           >
-            {/* Dark overlay for better text readability */}
+            {pokeballMeta && (
+              <img
+                src={pokeballMeta.url}
+                alt={pokeballMeta.label}
+                title={pokeballMeta.label}
+                className="pokeball-overlay"
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  right: -10,
+                  width: 26,
+                  height: 26,
+                  objectFit: "contain",
+                  zIndex: 60,
+                  pointerEvents: "none",
+                  filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.7))",
+                }}
+              />
+            )}
+
             <div
+              className={`pokemon-card ${
+                isApex
+                  ? "apex-card"
+                  : isShiny
+                  ? "shiny-card"
+                  : isShadow
+                  ? "shadow-card"
+                  : isPurified
+                  ? "purified-card"
+                  : ""
+              }`}
               style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background:
-                  "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
-                pointerEvents: "none",
-                zIndex: 1,
-              }}
-            />
-
-            {/* Lucky Overlay */}
-            {isLucky && (
-              <img
-                src="/img/lucky.png"
-                alt="lucky"
-                style={{
-                  position: "absolute",
-                  width: "70%",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  bottom: "175px",
-                  zIndex: 0,
-                  opacity: 0.6,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
-
-            {/* Shadow Fire Overlay */}
-            {isShadow && (
-              <img
-                src="/img/shadow.gif"
-                alt="shadow"
-                style={{
-                  position: "absolute",
-                  width: "70%",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  bottom: "175px",
-                  zIndex: 4,
-                  opacity: 0.3,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
-
-            {/* Purified Overlay */}
-            {isPurified && (
-              <img
-                src="/img/purified.png"
-                alt="purified"
-                style={{
-                  position: "absolute",
-                  width: "70%",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  bottom: "175px",
-                  zIndex: 2,
-                  opacity: 0.6,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
-
-            <Card
-              variant="outlined"
-              style={{
-                background: "transparent",
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
+                overflow: "hidden",
+                background:
+                  isApex || isShiny || isShadow || isPurified
+                    ? undefined
+                    : typeGradient,
+                borderColor:
+                  isApex || isShiny || isShadow || isPurified
+                    ? undefined
+                    : typeBorder,
+                position: "relative",
               }}
-              styles={{
-                actions: {
-                  background: "rgba(0, 0, 0, 0.7)",
-                  backdropFilter: "blur(10px)",
-                  borderTop: "1.5px solid rgba(255, 255, 255, 0.2)",
-                  padding: "12px 0",
-                  margin: "0",
-                  position: "relative",
-                  zIndex: 2,
-                  width: "100%",
-                  listStyle: "none",
-                },
-                body: {
-                  padding: "12px",
-                  flex: 1,
+            >
+              {/* Type background image (top -> fade out) */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "55%",
+                  backgroundImage: `url(${typeBgUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "top center",
+                  opacity: 0.9,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  WebkitMaskImage:
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                  maskImage:
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                }}
+              />
+
+              {/* Dark overlay for better text readability */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background:
+                    "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+              />
+
+              {/* Lucky Overlay */}
+              {isLucky && (
+                <img
+                  src="/img/lucky.png"
+                  alt="lucky"
+                  style={{
+                    position: "absolute",
+                    width: "70%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "175px",
+                    zIndex: 0,
+                    opacity: 0.6,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              {/* Shadow Fire Overlay */}
+              {isShadow && (
+                <img
+                  src="/img/shadow.gif"
+                  alt="shadow"
+                  style={{
+                    position: "absolute",
+                    width: "70%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "175px",
+                    zIndex: 4,
+                    opacity: 0.3,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              {/* Purified Overlay */}
+              {isPurified && (
+                <img
+                  src="/img/purified.png"
+                  alt="purified"
+                  style={{
+                    position: "absolute",
+                    width: "70%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "175px",
+                    zIndex: 2,
+                    opacity: 0.6,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              <Card
+                variant="outlined"
+                style={{
+                  background: "transparent",
+                  height: "100%",
                   display: "flex",
                   flexDirection: "column",
-                },
-              }}
-              actions={[
-                <div
-                  key="attack"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <ThunderboltOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#ff4d4f",
-                      filter: "drop-shadow(0 2px 4px rgba(255, 77, 79, 0.8))",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      color: "#FFFFFF",
-                      textShadow:
-                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
-                    }}
-                  >
-                    {pvpActive && pvpAtk !== undefined ? (
-                      <>
-                        <span style={{ color: statColor(atkMatch) }}>
-                          {pokemon.attack}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
-                      </>
-                    ) : (
-                      pokemon.attack
-                    )}
-                  </span>
-                </div>,
-                <div
-                  key="defense"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <SafetyOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#faad14",
-                      filter: "drop-shadow(0 2px 4px rgba(250, 173, 20, 0.8))",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      color: "#FFFFFF",
-                      textShadow:
-                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
-                    }}
-                  >
-                    {pvpActive && pvpDef !== undefined ? (
-                      <>
-                        <span style={{ color: statColor(defMatch) }}>
-                          {pokemon.defence}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpDef}</span>
-                      </>
-                    ) : (
-                      pokemon.defence
-                    )}
-                  </span>
-                </div>,
-                <div
-                  key="stamina"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <HeartOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#eb2f96",
-                      filter: "drop-shadow(0 2px 4px rgba(235, 47, 150, 0.8))",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      color: "#FFFFFF",
-                      textShadow:
-                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
-                    }}
-                  >
-                    {pvpActive && pvpStm !== undefined ? (
-                      <>
-                        <span style={{ color: statColor(stmMatch) }}>
-                          {pokemon.stamina}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpStm}</span>
-                      </>
-                    ) : (
-                      pokemon.stamina
-                    )}
-                  </span>
-                </div>,
-              ]}
-            >
-              {/* Pokemon Badges */}
-              <div
-                style={{
-                  display: "inline-flex",
-                  gap: "8px",
-                  justifyContent: "center",
-                  marginBottom: "8px",
-                  background: "rgba(0, 0, 0, 0.85)",
-                  borderRadius: "20px",
-                  padding: "8px 14px",
-                  boxShadow:
-                    "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
-                  border: "1.5px solid rgba(255, 255, 255, 0.2)",
-                  minHeight: "36px",
-                  alignItems: "center",
-                  position: "relative",
-                  zIndex: 2,
                 }}
-              >
-                {!isApex &&
-                !isShiny &&
-                !isShadow &&
-                !isPurified &&
-                !isLucky &&
-                !pokemon.legendary &&
-                !pokemon.mythic ? (
-                  <CheckCircleOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#95a5a6",
-                      filter: "drop-shadow(0 0 4px rgba(149, 165, 166, 0.5))",
-                    }}
-                    title="Normal"
-                  />
-                ) : (
-                  <>
-                    {isApex && (
-                      <ThunderboltFilled
-                        style={{
-                          fontSize: "22px",
-                          color: "#FF00FF",
-                          filter:
-                            "drop-shadow(0 0 10px rgba(255, 0, 255, 1)) drop-shadow(0 0 15px rgba(0, 255, 255, 0.8)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Apex"
-                      />
-                    )}
-                    {isShiny && (
-                      <StarOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FFD700",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Shiny"
-                      />
-                    )}
-                    {isShadow && (
-                      <FireOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#8B2BE2",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(138, 43, 226, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Shadow"
-                      />
-                    )}
-                    {isPurified && (
-                      <SmileOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FFFFFF",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 255, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Purified"
-                      />
-                    )}
-                    {isLucky && (
-                      <GiftOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FFA500",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 165, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Lucky"
-                      />
-                    )}
-                    {pokemon.legendary && (
-                      <TrophyOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FF6347",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Legendary"
-                      />
-                    )}
-                    {pokemon.mythic && (
-                      <CrownOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#9B59B6",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Mythical"
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Image Container */}
-              <div
-                style={{
-                  width: "100%",
-                  height: "120px",
-                  display: "flex",
-                  alignItems: "end",
-                  justifyContent: "center",
-                  marginBottom: "12px",
-                  position: "relative",
-                  zIndex: 3,
+                styles={{
+                  actions: {
+                    background: "rgba(0, 0, 0, 0.7)",
+                    backdropFilter: "blur(10px)",
+                    borderTop: "1.5px solid rgba(255, 255, 255, 0.2)",
+                    padding: "12px 0",
+                    margin: "0",
+                    position: "relative",
+                    zIndex: 2,
+                    width: "100%",
+                    listStyle: "none",
+                  },
+                  body: {
+                    padding: "12px",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                  },
                 }}
+                actions={[
+                  <div
+                    key="attack"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <ThunderboltOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#ff4d4f",
+                        filter: "drop-shadow(0 2px 4px rgba(255, 77, 79, 0.8))",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        color: "#FFFFFF",
+                        textShadow:
+                          "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
+                      }}
+                    >
+                      {pvpActive && pvpAtk !== undefined ? (
+                        <>
+                          <span style={{ color: statColor(atkMatch) }}>
+                            {pokemon.attack}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
+                        </>
+                      ) : (
+                        pokemon.attack
+                      )}
+                    </span>
+                  </div>,
+                  <div
+                    key="defense"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <SafetyOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#faad14",
+                        filter:
+                          "drop-shadow(0 2px 4px rgba(250, 173, 20, 0.8))",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        color: "#FFFFFF",
+                        textShadow:
+                          "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
+                      }}
+                    >
+                      {pvpActive && pvpDef !== undefined ? (
+                        <>
+                          <span style={{ color: statColor(defMatch) }}>
+                            {pokemon.defence}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpDef}</span>
+                        </>
+                      ) : (
+                        pokemon.defence
+                      )}
+                    </span>
+                  </div>,
+                  <div
+                    key="stamina"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <HeartOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#eb2f96",
+                        filter:
+                          "drop-shadow(0 2px 4px rgba(235, 47, 150, 0.8))",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        color: "#FFFFFF",
+                        textShadow:
+                          "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
+                      }}
+                    >
+                      {pvpActive && pvpStm !== undefined ? (
+                        <>
+                          <span style={{ color: statColor(stmMatch) }}>
+                            {pokemon.stamina}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpStm}</span>
+                        </>
+                      ) : (
+                        pokemon.stamina
+                      )}
+                    </span>
+                  </div>,
+                ]}
               >
-                <PokemonImage
-                  staticSrc={
-                    pokemon.image ? `/${pokemon.image}` : "/img/placeholder.png"
-                  }
-                  alt={pokemon.name}
-                  className={
-                    isApex
-                      ? "pokemon-apex"
-                      : isShiny
-                      ? "pokemon-shiny"
-                      : isShadow
-                      ? "pokemon-shadow"
-                      : isPurified
-                      ? "pokemon-purified"
-                      : ""
-                  }
-                  pokemonHeight={pokemon.height || 1}
-                  tallestHeight={
-                    speciesTallestByDex[pokemon.number] || pokemon.height || 1
-                  }
-                  containerWidth={CARD_WIDTH}
-                  containerHeight={120}
-                  minPx={60}
-                />
-              </div>
-
-              {/* Pokemon Info */}
-              <div
-                style={{ textAlign: "center", position: "relative", zIndex: 2 }}
-              >
-                {/* Name and IV Tags */}
+                {/* Pokemon Badges */}
                 <div
                   style={{
-                    display: "flex",
+                    display: "inline-flex",
                     gap: "8px",
                     justifyContent: "center",
-                    marginBottom: "10px",
+                    marginBottom: "8px",
+                    background: "rgba(0, 0, 0, 0.85)",
+                    borderRadius: "20px",
+                    padding: "8px 14px",
+                    boxShadow:
+                      "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                    border: "1.5px solid rgba(255, 255, 255, 0.2)",
+                    minHeight: "36px",
+                    alignItems: "center",
+                    position: "relative",
+                    zIndex: 30,
                   }}
                 >
-                  <Tag
-                    style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background: "#1e1e2e",
-                      border: "1px solid #3a3a54",
-                      color: "#e0e0e0",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                    }}
-                  >
-                    {pokemon.gender_symbol && pokemon.gender_symbol !== "⚲" && (
-                      <span style={{ marginRight: "4px" }}>
-                        {pokemon.gender_symbol}
-                      </span>
-                    )}
-                    {pokemon.name}
-                  </Tag>
-                  <Tag
-                    style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background:
-                        pokemon.iv >= 90
-                          ? "#2d4a2e"
-                          : pokemon.iv >= 80
-                          ? "#2d3a54"
-                          : pokemon.iv >= 70
-                          ? "#3a3a2e"
-                          : "#4a2e2e",
-                      border:
-                        pokemon.iv >= 90
-                          ? "1px solid #4a7c4d"
-                          : pokemon.iv >= 80
-                          ? "1px solid #4a5c7c"
-                          : pokemon.iv >= 70
-                          ? "1px solid #6c6c4a"
-                          : "1px solid #7c4a4a",
-                      color:
-                        pokemon.iv >= 90
-                          ? "#88cc88"
-                          : pokemon.iv >= 80
-                          ? "#88aacc"
-                          : pokemon.iv >= 70
-                          ? "#cccc88"
-                          : "#cc8888",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                    }}
-                  >
-                    {pokemon.iv.toFixed(1)}%
-                  </Tag>
+                  {!isApex &&
+                  !isShiny &&
+                  !isShadow &&
+                  !isPurified &&
+                  !isLucky &&
+                  !pokemon.legendary &&
+                  !pokemon.mythic ? (
+                    <CheckCircleOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#95a5a6",
+                        filter: "drop-shadow(0 0 4px rgba(149, 165, 166, 0.5))",
+                      }}
+                      title="Normal"
+                    />
+                  ) : (
+                    <>
+                      {isApex && (
+                        <ThunderboltFilled
+                          style={{
+                            fontSize: "22px",
+                            color: "#FF00FF",
+                            filter:
+                              "drop-shadow(0 0 10px rgba(255, 0, 255, 1)) drop-shadow(0 0 15px rgba(0, 255, 255, 0.8)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Apex"
+                        />
+                      )}
+                      {isShiny && (
+                        <StarOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FFD700",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Shiny"
+                        />
+                      )}
+                      {isShadow && (
+                        <FireOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#8B2BE2",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(138, 43, 226, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Shadow"
+                        />
+                      )}
+                      {isPurified && (
+                        <SmileOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FFFFFF",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 255, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Purified"
+                        />
+                      )}
+                      {isLucky && (
+                        <GiftOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FFA500",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 165, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Lucky"
+                        />
+                      )}
+                      {pokemon.legendary && (
+                        <TrophyOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FF6347",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Legendary"
+                        />
+                      )}
+                      {pokemon.mythic && (
+                        <CrownOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#9B59B6",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Mythical"
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {isGigantamax ? (
+                    <img
+                      src="/img/icons/gigantamax.png"
+                      alt="gigantamax"
+                      title="Gigantamax"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.9))",
+                      }}
+                    />
+                  ) : isDynamax ? (
+                    <img
+                      src="/img/icons/dynamax.png"
+                      alt="dynamax"
+                      title="Dynamax"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.9))",
+                      }}
+                    />
+                  ) : null}
                 </div>
 
-                {/* CP and Size Tags */}
+                {/* Image Container */}
                 <div
                   style={{
+                    width: "100%",
+                    height: "120px",
                     display: "flex",
-                    gap: "8px",
+                    alignItems: "end",
                     justifyContent: "center",
+                    marginBottom: "12px",
+                    position: "relative",
+                    zIndex: 10,
                   }}
                 >
-                  <Tag
+                  <PokemonImage
+                    staticSrc={
+                      pokemon.image
+                        ? `/${pokemon.image}`
+                        : "/img/placeholder.png"
+                    }
+                    alt={pokemon.name}
+                    className={[
+                      isApex
+                        ? "pokemon-apex"
+                        : isShiny
+                        ? "pokemon-shiny"
+                        : isShadow
+                        ? "pokemon-shadow"
+                        : isPurified
+                        ? "pokemon-purified"
+                        : "",
+                      isGigantamax || isDynamax ? "pokemon-dynamax" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    pokemonHeight={pokemon.height || 1}
+                    tallestHeight={
+                      speciesTallestByDex[pokemon.number] || pokemon.height || 1
+                    }
+                    containerWidth={CARD_WIDTH}
+                    containerHeight={120}
+                    minPx={60}
+                    heightMultiplier={isGigantamax ? 1.2 : 1}
+                  />
+                </div>
+
+                {/* Pokemon Info */}
+                <div
+                  style={{
+                    textAlign: "center",
+                    position: "relative",
+                    zIndex: 2,
+                  }}
+                >
+                  {/* Name and IV Tags */}
+                  <div
                     style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background: "#1e1e2e",
-                      border: "1px solid #3a3a54",
-                      color: "#e0e0e0",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      display: "flex",
+                      gap: "8px",
+                      justifyContent: "center",
+                      marginBottom: "10px",
                     }}
                   >
-                    {pvpActive && pvpCp !== undefined ? (
-                      <>
-                        <span style={{ color: "#FFFFFF" }}>CP </span>
-                        <span style={{ color: statColor(cpMatch) }}>
-                          {pokemon.cp}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpCp}</span>
-                      </>
-                    ) : (
-                      `CP ${pokemon.cp}`
-                    )}
-                  </Tag>
-
-                  {pvpEnabled && pokemon.pvp_meta_rank !== undefined && (
                     <Tag
                       style={{
                         margin: 0,
@@ -1107,11 +1166,88 @@ const DexViewer: React.FC = () => {
                         boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                       }}
                     >
-                      #{pokemon.pvp_meta_rank}
+                      {pokemon.gender_symbol &&
+                        pokemon.gender_symbol !== "⚲" && (
+                          <span style={{ marginRight: "4px" }}>
+                            {pokemon.gender_symbol}
+                          </span>
+                        )}
+                      {pokemon.name}
                     </Tag>
-                  )}
-                  {!pvpActive &&
-                    (pokemon.height_label || pokemon.weight_label) && (
+                    <Tag
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        fontSize: "12px",
+                        borderRadius: "8px",
+                        padding: "4px 10px",
+                        background:
+                          pokemon.iv >= 90
+                            ? "#2d4a2e"
+                            : pokemon.iv >= 80
+                            ? "#2d3a54"
+                            : pokemon.iv >= 70
+                            ? "#3a3a2e"
+                            : "#4a2e2e",
+                        border:
+                          pokemon.iv >= 90
+                            ? "1px solid #4a7c4d"
+                            : pokemon.iv >= 80
+                            ? "1px solid #4a5c7c"
+                            : pokemon.iv >= 70
+                            ? "1px solid #6c6c4a"
+                            : "1px solid #7c4a4a",
+                        color:
+                          pokemon.iv >= 90
+                            ? "#88cc88"
+                            : pokemon.iv >= 80
+                            ? "#88aacc"
+                            : pokemon.iv >= 70
+                            ? "#cccc88"
+                            : "#cc8888",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      }}
+                    >
+                      {pokemon.iv.toFixed(1)}%
+                    </Tag>
+                  </div>
+
+                  {/* CP and Size Tags */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Tag
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        fontSize: "12px",
+                        borderRadius: "8px",
+                        padding: "4px 10px",
+                        background: "#1e1e2e",
+                        border: "1px solid #3a3a54",
+                        color: "#e0e0e0",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      }}
+                    >
+                      {pvpActive && pvpCp !== undefined ? (
+                        <>
+                          <span style={{ color: "#FFFFFF" }}>CP </span>
+                          <span style={{ color: statColor(cpMatch) }}>
+                            {pokemon.cp}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpCp}</span>
+                        </>
+                      ) : (
+                        `CP ${pokemon.cp}`
+                      )}
+                    </Tag>
+
+                    {pvpEnabled && pokemon.pvp_meta_rank !== undefined && (
                       <Tag
                         style={{
                           margin: 0,
@@ -1119,19 +1255,38 @@ const DexViewer: React.FC = () => {
                           fontSize: "12px",
                           borderRadius: "8px",
                           padding: "4px 10px",
-                          background: "#3a2e2e",
-                          border: "1px solid #6c4a3a",
-                          color: "#cc9966",
+                          background: "#1e1e2e",
+                          border: "1px solid #3a3a54",
+                          color: "#e0e0e0",
                           boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
                         }}
                       >
-                        {pokemon.height_label?.toUpperCase() ||
-                          pokemon.weight_label?.toUpperCase()}
+                        #{pokemon.pvp_meta_rank}
                       </Tag>
                     )}
+                    {!pvpActive &&
+                      (pokemon.height_label || pokemon.weight_label) && (
+                        <Tag
+                          style={{
+                            margin: 0,
+                            fontWeight: "600",
+                            fontSize: "12px",
+                            borderRadius: "8px",
+                            padding: "4px 10px",
+                            background: "#3a2e2e",
+                            border: "1px solid #6c4a3a",
+                            color: "#cc9966",
+                            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                          }}
+                        >
+                          {pokemon.height_label?.toUpperCase() ||
+                            pokemon.weight_label?.toUpperCase()}
+                        </Tag>
+                      )}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         </div>
       );
@@ -1147,6 +1302,10 @@ const DexViewer: React.FC = () => {
       const isLucky = pokemon.lucky || false;
       const isPurified = pokemon.purified || false;
       const isApex = pokemon.apex || false;
+      const isDynamax = Boolean(pokemon.dynamax);
+      const isGigantamax = Boolean(pokemon.gigantamax);
+
+      const pokeballMeta = getPokeballMeta(pokemon);
 
       const pvpActive = Boolean(pokemon.pvp_enabled);
       const pvpAtk = pokemon.pvp_meta_atk;
@@ -1178,6 +1337,7 @@ const DexViewer: React.FC = () => {
       );
       const typeGradient = getTypeGradient(types);
       const typeBorder = getTypeBorderColor(types);
+      const typeBgUrl = getTypeBackgroundUrl(pokemon);
 
       return (
         <div
@@ -1189,537 +1349,626 @@ const DexViewer: React.FC = () => {
           }}
         >
           <div
-            className={`pokemon-card ${
-              isApex
-                ? "apex-card"
-                : isShiny
-                ? "shiny-card"
-                : isShadow
-                ? "shadow-card"
-                : isPurified
-                ? "purified-card"
-                : ""
-            }`}
+            className="pokemon-card-wrapper"
             style={{
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-              background:
-                isApex || isShiny || isShadow || isPurified
-                  ? undefined
-                  : typeGradient,
-              borderColor:
-                isApex || isShiny || isShadow || isPurified
-                  ? undefined
-                  : typeBorder,
               position: "relative",
+              height: "100%",
+              overflow: "visible",
             }}
           >
+            {pokeballMeta && (
+              <img
+                src={pokeballMeta.url}
+                alt={pokeballMeta.label}
+                title={pokeballMeta.label}
+                className="pokeball-overlay"
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  right: -10,
+                  width: 26,
+                  height: 26,
+                  objectFit: "contain",
+                  zIndex: 60,
+                  pointerEvents: "none",
+                  filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.7))",
+                }}
+              />
+            )}
+
             <div
+              className={`pokemon-card ${
+                isApex
+                  ? "apex-card"
+                  : isShiny
+                  ? "shiny-card"
+                  : isShadow
+                  ? "shadow-card"
+                  : isPurified
+                  ? "purified-card"
+                  : ""
+              }`}
               style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background:
-                  "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
-                pointerEvents: "none",
-                zIndex: 1,
-              }}
-            />
-
-            {isLucky && (
-              <img
-                src="/img/lucky.png"
-                alt="lucky"
-                style={{
-                  position: "absolute",
-                  width: "70%",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  bottom: "175px",
-                  zIndex: 0,
-                  opacity: 0.6,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
-
-            {isShadow && (
-              <img
-                src="/img/shadow.gif"
-                alt="shadow"
-                style={{
-                  position: "absolute",
-                  width: "70%",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  bottom: "175px",
-                  zIndex: 4,
-                  opacity: 0.3,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
-
-            {isPurified && (
-              <img
-                src="/img/purified.png"
-                alt="purified"
-                style={{
-                  position: "absolute",
-                  width: "70%",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  bottom: "175px",
-                  zIndex: 2,
-                  opacity: 0.6,
-                  pointerEvents: "none",
-                }}
-              />
-            )}
-
-            <Card
-              variant="outlined"
-              style={{
-                background: "transparent",
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
+                overflow: "hidden",
+                background:
+                  isApex || isShiny || isShadow || isPurified
+                    ? undefined
+                    : typeGradient,
+                borderColor:
+                  isApex || isShiny || isShadow || isPurified
+                    ? undefined
+                    : typeBorder,
+                position: "relative",
               }}
-              styles={{
-                actions: {
-                  background: "rgba(0, 0, 0, 0.7)",
-                  backdropFilter: "blur(10px)",
-                  borderTop: "1.5px solid rgba(255, 255, 255, 0.2)",
-                  padding: "12px 0",
-                  margin: "0",
-                  position: "relative",
-                  zIndex: 2,
-                  width: "100%",
-                  listStyle: "none",
-                },
-                body: {
-                  padding: "12px",
-                  flex: 1,
+            >
+              {/* Type background image (top -> fade out) */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "55%",
+                  backgroundImage: `url(${typeBgUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "top center",
+                  opacity: 0.9,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                  WebkitMaskImage:
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                  maskImage:
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background:
+                    "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+              />
+
+              {isLucky && (
+                <img
+                  src="/img/lucky.png"
+                  alt="lucky"
+                  style={{
+                    position: "absolute",
+                    width: "70%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "175px",
+                    zIndex: 0,
+                    opacity: 0.6,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              {isShadow && (
+                <img
+                  src="/img/shadow.gif"
+                  alt="shadow"
+                  style={{
+                    position: "absolute",
+                    width: "70%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "175px",
+                    zIndex: 4,
+                    opacity: 0.3,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              {isPurified && (
+                <img
+                  src="/img/purified.png"
+                  alt="purified"
+                  style={{
+                    position: "absolute",
+                    width: "70%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "175px",
+                    zIndex: 2,
+                    opacity: 0.6,
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
+              <Card
+                variant="outlined"
+                style={{
+                  background: "transparent",
+                  height: "100%",
                   display: "flex",
                   flexDirection: "column",
-                },
-              }}
-              actions={[
-                <div
-                  key="attack"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <ThunderboltOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#ff4d4f",
-                      filter: "drop-shadow(0 2px 4px rgba(255, 77, 79, 0.8))",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      textShadow:
-                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
-                    }}
-                  >
-                    {pvpActive && pvpAtk !== undefined ? (
-                      <>
-                        <span style={{ color: statColor(atkMatch) }}>
-                          {pokemon.attack}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
-                      </>
-                    ) : (
-                      pokemon.attack
-                    )}
-                  </span>
-                </div>,
-                <div
-                  key="defense"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <SafetyOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#faad14",
-                      filter: "drop-shadow(0 2px 4px rgba(250, 173, 20, 0.8))",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      textShadow:
-                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
-                    }}
-                  >
-                    {pvpActive && pvpDef !== undefined ? (
-                      <>
-                        <span style={{ color: statColor(defMatch) }}>
-                          {pokemon.defence}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpDef}</span>
-                      </>
-                    ) : (
-                      pokemon.defence
-                    )}
-                  </span>
-                </div>,
-                <div
-                  key="stamina"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <HeartOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#eb2f96",
-                      filter: "drop-shadow(0 2px 4px rgba(235, 47, 150, 0.8))",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      textShadow:
-                        "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
-                    }}
-                  >
-                    {pvpActive && pvpStm !== undefined ? (
-                      <>
-                        <span style={{ color: statColor(stmMatch) }}>
-                          {pokemon.stamina}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpStm}</span>
-                      </>
-                    ) : (
-                      pokemon.stamina
-                    )}
-                  </span>
-                </div>,
-              ]}
-            >
-              {/* Pokemon Badges (same as normal card) */}
-              <div
-                style={{
-                  display: "inline-flex",
-                  gap: "8px",
-                  justifyContent: "center",
-                  marginBottom: "8px",
-                  background: "rgba(0, 0, 0, 0.85)",
-                  borderRadius: "20px",
-                  padding: "8px 14px",
-                  boxShadow:
-                    "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
-                  border: "1.5px solid rgba(255, 255, 255, 0.2)",
-                  minHeight: "36px",
-                  alignItems: "center",
-                  position: "relative",
-                  zIndex: 2,
                 }}
-              >
-                {!isApex &&
-                !isShiny &&
-                !isShadow &&
-                !isPurified &&
-                !isLucky &&
-                !pokemon.legendary &&
-                !pokemon.mythic ? (
-                  <CheckCircleOutlined
-                    style={{
-                      fontSize: "20px",
-                      color: "#95a5a6",
-                      filter: "drop-shadow(0 0 4px rgba(149, 165, 166, 0.5))",
-                    }}
-                    title="Normal"
-                  />
-                ) : (
-                  <>
-                    {isApex && (
-                      <ThunderboltFilled
-                        style={{
-                          fontSize: "22px",
-                          color: "#FF00FF",
-                          filter:
-                            "drop-shadow(0 0 10px rgba(255, 0, 255, 1)) drop-shadow(0 0 15px rgba(0, 255, 255, 0.8)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Apex"
-                      />
-                    )}
-                    {isShiny && (
-                      <StarOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FFD700",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Shiny"
-                      />
-                    )}
-                    {isShadow && (
-                      <FireOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#8B2BE2",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(138, 43, 226, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Shadow"
-                      />
-                    )}
-                    {isPurified && (
-                      <SmileOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FFFFFF",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 255, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Purified"
-                      />
-                    )}
-                    {isLucky && (
-                      <GiftOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FFA500",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 165, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Lucky"
-                      />
-                    )}
-                    {pokemon.legendary && (
-                      <TrophyOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#FF6347",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Legendary"
-                      />
-                    )}
-                    {pokemon.mythic && (
-                      <CrownOutlined
-                        style={{
-                          fontSize: "22px",
-                          color: "#9B59B6",
-                          filter:
-                            "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
-                        }}
-                        title="Mythical"
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div
-                style={{
-                  width: "100%",
-                  height: "120px",
-                  display: "flex",
-                  alignItems: "end",
-                  justifyContent: "center",
-                  marginBottom: "12px",
-                  position: "relative",
-                  zIndex: 3,
+                styles={{
+                  actions: {
+                    background: "rgba(0, 0, 0, 0.7)",
+                    backdropFilter: "blur(10px)",
+                    borderTop: "1.5px solid rgba(255, 255, 255, 0.2)",
+                    padding: "12px 0",
+                    margin: "0",
+                    position: "relative",
+                    zIndex: 2,
+                    width: "100%",
+                    listStyle: "none",
+                  },
+                  body: {
+                    padding: "12px",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                  },
                 }}
+                actions={[
+                  <div
+                    key="attack"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <ThunderboltOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#ff4d4f",
+                        filter: "drop-shadow(0 2px 4px rgba(255, 77, 79, 0.8))",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        textShadow:
+                          "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(255, 77, 79, 0.5)",
+                      }}
+                    >
+                      {pvpActive && pvpAtk !== undefined ? (
+                        <>
+                          <span style={{ color: statColor(atkMatch) }}>
+                            {pokemon.attack}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
+                        </>
+                      ) : (
+                        pokemon.attack
+                      )}
+                    </span>
+                  </div>,
+                  <div
+                    key="defense"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <SafetyOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#faad14",
+                        filter:
+                          "drop-shadow(0 2px 4px rgba(250, 173, 20, 0.8))",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        textShadow:
+                          "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(250, 173, 20, 0.5)",
+                      }}
+                    >
+                      {pvpActive && pvpDef !== undefined ? (
+                        <>
+                          <span style={{ color: statColor(defMatch) }}>
+                            {pokemon.defence}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpDef}</span>
+                        </>
+                      ) : (
+                        pokemon.defence
+                      )}
+                    </span>
+                  </div>,
+                  <div
+                    key="stamina"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <HeartOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#eb2f96",
+                        filter:
+                          "drop-shadow(0 2px 4px rgba(235, 47, 150, 0.8))",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        textShadow:
+                          "0 2px 6px rgba(0,0,0,1), 0 0 8px rgba(235, 47, 150, 0.5)",
+                      }}
+                    >
+                      {pvpActive && pvpStm !== undefined ? (
+                        <>
+                          <span style={{ color: statColor(stmMatch) }}>
+                            {pokemon.stamina}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpStm}</span>
+                        </>
+                      ) : (
+                        pokemon.stamina
+                      )}
+                    </span>
+                  </div>,
+                ]}
               >
-                <PokemonImage
-                  staticSrc={
-                    pokemon.image ? `/${pokemon.image}` : "/img/placeholder.png"
-                  }
-                  alt={pokemon.name}
-                  className={
-                    isApex
-                      ? "pokemon-apex"
-                      : isShiny
-                      ? "pokemon-shiny"
-                      : isShadow
-                      ? "pokemon-shadow"
-                      : isPurified
-                      ? "pokemon-purified"
-                      : ""
-                  }
-                  pokemonHeight={pokemon.height || 1}
-                  tallestHeight={
-                    speciesTallestByDex[pokemon.number] || pokemon.height || 1
-                  }
-                  containerWidth={CARD_WIDTH}
-                  containerHeight={120}
-                  minPx={60}
-                />
-              </div>
-
-              <div
-                style={{ textAlign: "center", position: "relative", zIndex: 2 }}
-              >
+                {/* Pokemon Badges (same as normal card) */}
                 <div
                   style={{
-                    display: "flex",
+                    display: "inline-flex",
                     gap: "8px",
                     justifyContent: "center",
-                    marginBottom: "10px",
+                    marginBottom: "8px",
+                    background: "rgba(0, 0, 0, 0.85)",
+                    borderRadius: "20px",
+                    padding: "8px 14px",
+                    boxShadow:
+                      "0 4px 12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                    border: "1.5px solid rgba(255, 255, 255, 0.2)",
+                    minHeight: "36px",
+                    alignItems: "center",
+                    position: "relative",
+                    zIndex: 30,
                   }}
                 >
-                  <Tag
-                    style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background: "#1e1e2e",
-                      border: "1px solid #3a3a54",
-                      color: "#e0e0e0",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                    }}
-                  >
-                    {pokemon.gender_symbol && pokemon.gender_symbol !== "⚲" && (
-                      <span style={{ marginRight: "4px" }}>
-                        {pokemon.gender_symbol}
-                      </span>
-                    )}
-                    {pokemon.name}
-                  </Tag>
-                  <Tag
-                    style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background:
-                        pokemon.iv >= 90
-                          ? "#2d4a2e"
-                          : pokemon.iv >= 80
-                          ? "#2d3a54"
-                          : pokemon.iv >= 70
-                          ? "#3a3a2e"
-                          : "#4a2e2e",
-                      border:
-                        pokemon.iv >= 90
-                          ? "1px solid #4a7c4d"
-                          : pokemon.iv >= 80
-                          ? "1px solid #4a5c7c"
-                          : pokemon.iv >= 70
-                          ? "1px solid #6c6c4a"
-                          : "1px solid #7c4a4a",
-                      color:
-                        pokemon.iv >= 90
-                          ? "#88cc88"
-                          : pokemon.iv >= 80
-                          ? "#88aacc"
-                          : pokemon.iv >= 70
-                          ? "#cccc88"
-                          : "#cc8888",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                    }}
-                  >
-                    {pokemon.iv.toFixed(1)}%
-                  </Tag>
+                  {!isApex &&
+                  !isShiny &&
+                  !isShadow &&
+                  !isPurified &&
+                  !isLucky &&
+                  !pokemon.legendary &&
+                  !pokemon.mythic ? (
+                    <CheckCircleOutlined
+                      style={{
+                        fontSize: "20px",
+                        color: "#95a5a6",
+                        filter: "drop-shadow(0 0 4px rgba(149, 165, 166, 0.5))",
+                      }}
+                      title="Normal"
+                    />
+                  ) : (
+                    <>
+                      {isApex && (
+                        <ThunderboltFilled
+                          style={{
+                            fontSize: "22px",
+                            color: "#FF00FF",
+                            filter:
+                              "drop-shadow(0 0 10px rgba(255, 0, 255, 1)) drop-shadow(0 0 15px rgba(0, 255, 255, 0.8)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Apex"
+                        />
+                      )}
+                      {isShiny && (
+                        <StarOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FFD700",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 215, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Shiny"
+                        />
+                      )}
+                      {isShadow && (
+                        <FireOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#8B2BE2",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(138, 43, 226, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Shadow"
+                        />
+                      )}
+                      {isPurified && (
+                        <SmileOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FFFFFF",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 255, 255, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Purified"
+                        />
+                      )}
+                      {isLucky && (
+                        <GiftOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FFA500",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 165, 0, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Lucky"
+                        />
+                      )}
+                      {pokemon.legendary && (
+                        <TrophyOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#FF6347",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(255, 99, 71, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Legendary"
+                        />
+                      )}
+                      {pokemon.mythic && (
+                        <CrownOutlined
+                          style={{
+                            fontSize: "22px",
+                            color: "#9B59B6",
+                            filter:
+                              "drop-shadow(0 0 8px rgba(155, 89, 182, 1)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9))",
+                          }}
+                          title="Mythical"
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {isGigantamax ? (
+                    <img
+                      src="/img/icons/gigantamax.png"
+                      alt="gigantamax"
+                      title="Gigantamax"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.9))",
+                      }}
+                    />
+                  ) : isDynamax ? (
+                    <img
+                      src="/img/icons/dynamax.png"
+                      alt="dynamax"
+                      title="Dynamax"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        objectFit: "contain",
+                        filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.9))",
+                      }}
+                    />
+                  ) : null}
                 </div>
 
                 <div
                   style={{
+                    width: "100%",
+                    height: "120px",
                     display: "flex",
-                    gap: "8px",
+                    alignItems: "end",
                     justifyContent: "center",
+                    marginBottom: "12px",
+                    position: "relative",
+                    zIndex: 10,
                   }}
                 >
-                  <Tag
+                  <PokemonImage
+                    staticSrc={
+                      pokemon.image
+                        ? `/${pokemon.image}`
+                        : "/img/placeholder.png"
+                    }
+                    alt={pokemon.name}
+                    className={[
+                      isApex
+                        ? "pokemon-apex"
+                        : isShiny
+                        ? "pokemon-shiny"
+                        : isShadow
+                        ? "pokemon-shadow"
+                        : isPurified
+                        ? "pokemon-purified"
+                        : "",
+                      isGigantamax || isDynamax ? "pokemon-dynamax" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    pokemonHeight={pokemon.height || 1}
+                    tallestHeight={
+                      speciesTallestByDex[pokemon.number] || pokemon.height || 1
+                    }
+                    containerWidth={CARD_WIDTH}
+                    containerHeight={120}
+                    minPx={60}
+                    heightMultiplier={isGigantamax ? 1.2 : 1}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    textAlign: "center",
+                    position: "relative",
+                    zIndex: 2,
+                  }}
+                >
+                  <div
                     style={{
-                      margin: 0,
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      borderRadius: "8px",
-                      padding: "4px 10px",
-                      background: "#1e1e2e",
-                      border: "1px solid #3a3a54",
-                      color: "#e0e0e0",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      display: "flex",
+                      gap: "8px",
+                      justifyContent: "center",
+                      marginBottom: "10px",
                     }}
                   >
-                    {pvpActive && pvpCp !== undefined ? (
-                      <>
-                        <span style={{ color: "#FFFFFF" }}>CP </span>
-                        <span style={{ color: statColor(cpMatch) }}>
-                          {pokemon.cp}
-                        </span>
-                        <span style={{ color: "#FFFFFF" }}> / </span>
-                        <span style={{ color: "#52c41a" }}>{pvpCp}</span>
-                      </>
-                    ) : (
-                      `CP ${pokemon.cp}`
-                    )}
-                  </Tag>
+                    <Tag
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        fontSize: "12px",
+                        borderRadius: "8px",
+                        padding: "4px 10px",
+                        background: "#1e1e2e",
+                        border: "1px solid #3a3a54",
+                        color: "#e0e0e0",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      }}
+                    >
+                      {pokemon.gender_symbol &&
+                        pokemon.gender_symbol !== "⚲" && (
+                          <span style={{ marginRight: "4px" }}>
+                            {pokemon.gender_symbol}
+                          </span>
+                        )}
+                      {pokemon.name}
+                    </Tag>
+                    <Tag
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        fontSize: "12px",
+                        borderRadius: "8px",
+                        padding: "4px 10px",
+                        background:
+                          pokemon.iv >= 90
+                            ? "#2d4a2e"
+                            : pokemon.iv >= 80
+                            ? "#2d3a54"
+                            : pokemon.iv >= 70
+                            ? "#3a3a2e"
+                            : "#4a2e2e",
+                        border:
+                          pokemon.iv >= 90
+                            ? "1px solid #4a7c4d"
+                            : pokemon.iv >= 80
+                            ? "1px solid #4a5c7c"
+                            : pokemon.iv >= 70
+                            ? "1px solid #6c6c4a"
+                            : "1px solid #7c4a4a",
+                        color:
+                          pokemon.iv >= 90
+                            ? "#88cc88"
+                            : pokemon.iv >= 80
+                            ? "#88aacc"
+                            : pokemon.iv >= 70
+                            ? "#cccc88"
+                            : "#cc8888",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      }}
+                    >
+                      {pokemon.iv.toFixed(1)}%
+                    </Tag>
+                  </div>
 
-                  {pokemon.pvp_enabled &&
-                    pokemon.pvp_meta_rank !== undefined && (
-                      <Tag
-                        style={{
-                          margin: 0,
-                          fontWeight: "600",
-                          fontSize: "12px",
-                          borderRadius: "8px",
-                          padding: "4px 10px",
-                          background: "#1e1e2e",
-                          border: "1px solid #3a3a54",
-                          color: "#e0e0e0",
-                          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                        }}
-                      >
-                        #{pokemon.pvp_meta_rank}
-                      </Tag>
-                    )}
-                  {!pvpActive &&
-                    (pokemon.height_label || pokemon.weight_label) && (
-                      <Tag
-                        style={{
-                          margin: 0,
-                          fontWeight: "600",
-                          fontSize: "12px",
-                          borderRadius: "8px",
-                          padding: "4px 10px",
-                          background: "#3a2e2e",
-                          border: "1px solid #6c4a3a",
-                          color: "#cc9966",
-                          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-                        }}
-                      >
-                        {pokemon.height_label?.toUpperCase() ||
-                          pokemon.weight_label?.toUpperCase()}
-                      </Tag>
-                    )}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Tag
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        fontSize: "12px",
+                        borderRadius: "8px",
+                        padding: "4px 10px",
+                        background: "#1e1e2e",
+                        border: "1px solid #3a3a54",
+                        color: "#e0e0e0",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                      }}
+                    >
+                      {pvpActive && pvpCp !== undefined ? (
+                        <>
+                          <span style={{ color: "#FFFFFF" }}>CP </span>
+                          <span style={{ color: statColor(cpMatch) }}>
+                            {pokemon.cp}
+                          </span>
+                          <span style={{ color: "#FFFFFF" }}> / </span>
+                          <span style={{ color: "#52c41a" }}>{pvpCp}</span>
+                        </>
+                      ) : (
+                        `CP ${pokemon.cp}`
+                      )}
+                    </Tag>
+
+                    {pokemon.pvp_enabled &&
+                      pokemon.pvp_meta_rank !== undefined && (
+                        <Tag
+                          style={{
+                            margin: 0,
+                            fontWeight: "600",
+                            fontSize: "12px",
+                            borderRadius: "8px",
+                            padding: "4px 10px",
+                            background: "#1e1e2e",
+                            border: "1px solid #3a3a54",
+                            color: "#e0e0e0",
+                            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                          }}
+                        >
+                          #{pokemon.pvp_meta_rank}
+                        </Tag>
+                      )}
+                    {!pvpActive &&
+                      (pokemon.height_label || pokemon.weight_label) && (
+                        <Tag
+                          style={{
+                            margin: 0,
+                            fontWeight: "600",
+                            fontSize: "12px",
+                            borderRadius: "8px",
+                            padding: "4px 10px",
+                            background: "#3a2e2e",
+                            border: "1px solid #6c4a3a",
+                            color: "#cc9966",
+                            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
+                          }}
+                        >
+                          {pokemon.height_label?.toUpperCase() ||
+                            pokemon.weight_label?.toUpperCase()}
+                        </Tag>
+                      )}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         </div>
       );

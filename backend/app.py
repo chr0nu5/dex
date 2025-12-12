@@ -1115,8 +1115,37 @@ def get_image_path(p):
             return "img/assets/pm250.fS.s.icon.png"
         return "img/assets/pm250.fS.icon.png"
 
+    def _normalize_form_token_for_sprite(token: str) -> str:
+        if not token or not isinstance(token, str):
+            return token
+        # CLONE forms should not include an underscore before the year.
+        # Example: COPY_2019 -> COPY2019
+        return re.sub(r"\bCOPY_(\d{4})\b", r"COPY\1", token)
+
+    def _is_any_max(pokemon: dict) -> bool:
+        if not isinstance(pokemon, dict):
+            return False
+        if bool(pokemon.get("gigantamax")):
+            return True
+        # Safety: some legacy/alternate paths might encode Gigantamax only in form.
+        try:
+            if isinstance(pokemon.get("form"), str) and "GIGANTAMAX" in pokemon.get(
+                "form", ""
+            ):
+                return True
+        except Exception:
+            pass
+        dyn = pokemon.get("dynamax")
+        if isinstance(dyn, dict):
+            return len(dyn.keys()) > 0
+        if isinstance(dyn, bool):
+            return dyn
+        return False
+
     image_name = f"pm{number}"
     form_part = form.replace(f"{name}_", "") if form else ""
+    form_part = _normalize_form_token_for_sprite(form_part)
+    form = _normalize_form_token_for_sprite(form)
 
     # Special size handling for Pumpkaboo and Gourgeist
     if number in [710, 711]:
@@ -1138,7 +1167,7 @@ def get_image_path(p):
     ):
         parts = form.split("_")
         if len(parts) >= 3:
-            form_part = "_".join(parts[2:])
+            form_part = _normalize_form_token_for_sprite("_".join(parts[2:]))
         image_name += f".f{form_part}"
     # Unown, Burmy, Wormadam - use full form
     elif name in ["UNOWN", "BURMY", "WORMADAM"]:
@@ -1163,6 +1192,7 @@ def get_image_path(p):
         gender == "FEMALE"
         and number in GENDER_VARIANTS
         and form_part not in NO_G2_FORMS
+        and not _is_any_max(p)
     ):
         image_name += ".g2"
 
@@ -1190,18 +1220,171 @@ def get_size_label(pokedex_value, actual_value):
 
 
 def extract_metadata_from_filename(filename):
-    """Extract user and date from filename like 'Pokemons-LioAndLiz-18-11-2025.json'"""
-    pattern = r"Pokemons-([^-]+)-(\d{2}-\d{2}-\d{4})\.json"
-    match = re.match(pattern, filename)
-    if match:
-        user = match.group(1)
-        date_str = match.group(2)
-        try:
-            date_obj = datetime.strptime(date_str, "%d-%m-%Y")
-            return user, date_obj.isoformat()
-        except:
+    """Extract logical user and date from export filenames.
+
+    Supported examples:
+    - Pokemons-LioAndLiz-18-11-2025.json
+    - Pokemons-SpeedUnlocker-JaspionHunter-12-12-2025-15.json
+
+    We intentionally search for the date token anywhere near the end, and treat
+    everything between 'Pokemons-' and that date as the logical user.
+    """
+    if not filename or not isinstance(filename, str):
+        return None, None
+
+    stem = filename
+    if stem.endswith(".json"):
+        stem = stem[: -len(".json")]
+
+    if not stem.startswith("Pokemons-"):
+        return None, None
+
+    # Find the last dd-mm-yyyy token in the name.
+    m = None
+    for m in re.finditer(r"\b(\d{2}-\d{2}-\d{4})\b", stem):
+        pass
+    if not m:
+        return None, None
+
+    date_str = m.group(1)
+    user_part = stem[len("Pokemons-") : m.start()].strip("-")
+    if not user_part:
+        return None, None
+
+    # Tool prefixes we want to ignore for logical user grouping.
+    if user_part.startswith("SpeedUnlocker-"):
+        user_part = user_part[len("SpeedUnlocker-") :]
+
+    try:
+        date_obj = datetime.strptime(date_str, "%d-%m-%Y")
+        return user_part, date_obj.isoformat()
+    except Exception:
+        return None, None
+
+
+def _camel_to_upper_snake(s: str) -> str:
+    if not s or not isinstance(s, str):
+        return ""
+    s2 = re.sub(r"[^A-Za-z0-9]+", "_", s)
+    s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s2)
+    s2 = re.sub(r"_+", "_", s2).strip("_")
+    return s2.upper()
+
+
+def _strip_known_prefix(value: str, prefixes: list[str]) -> str:
+    if not value or not isinstance(value, str):
+        return ""
+    out = value
+    for p in prefixes:
+        if out.startswith(p):
+            out = out[len(p) :]
+            break
+    return out
+
+
+def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
+    """Convert a SpeedUnlocker-style pokemon record into our canonical input schema.
+
+    This keeps enrichment lightweight (we mostly map fields) while enabling our
+    existing pipeline (master.json typing, image naming, search helpers).
+    """
+    if not isinstance(rec, dict):
+        return {}
+
+    dex_number = rec.get("dexNumber")
+    pokemon_name = rec.get("pokemonName")
+
+    # Best-effort internal species token.
+    pokemon_enum_raw = _strip_known_prefix(
+        str(rec.get("pokemon") or ""),
+        ["HoloPokemonId_", "HoloPokemonId"],
+    )
+    pokemon_enum = _camel_to_upper_snake(pokemon_enum_raw) or _camel_to_upper_snake(
+        str(pokemon_name or "")
+    )
+
+    # Best-effort internal form token (used by our sprite naming logic).
+    display = rec.get("display") if isinstance(rec.get("display"), dict) else {}
+    form_raw = _strip_known_prefix(
+        str(display.get("form") or ""),
+        ["PokemonDisplayProto_Form_"],
+    )
+    form_token = _camel_to_upper_snake(form_raw)
+    if not form_token or form_token == "FORM_UNSET":
+        form_token = f"{pokemon_enum}_NORMAL" if pokemon_enum else ""
+    elif pokemon_enum and not form_token.startswith(pokemon_enum + "_"):
+        # Many values are like PIKACHU_NORMAL already; but if not, normalize.
+        # If form token already contains pokemon name, leave it as-is.
+        if _camel_to_upper_snake(form_raw).startswith(pokemon_enum):
             pass
-    return None, None
+        else:
+            form_token = f"{pokemon_enum}_{form_token}"
+
+    # Dynamax / Gigantamax hint
+    dyn = rec.get("dynamax") if isinstance(rec.get("dynamax"), dict) else {}
+    if dyn.get("isGigantamaxLikely") and form_token and "GIGANTAMAX" not in form_token:
+        # Prefer SPECIES_GIGANTAMAX for sprite naming consistency.
+        if form_token.endswith("_NORMAL") and pokemon_enum:
+            form_token = f"{pokemon_enum}_GIGANTAMAX"
+        else:
+            form_token = (
+                f"{pokemon_enum}_GIGANTAMAX"
+                if pokemon_enum
+                else f"{form_token}_GIGANTAMAX"
+            )
+
+    gender_id = display.get("genderId")
+    known_gender = {1: "male", 2: "female", 3: "genderless"}.get(gender_id)
+    if not known_gender:
+        graw = _strip_known_prefix(
+            str(display.get("gender") or ""), ["PokemonDisplayProto_Gender_"]
+        )
+        gsn = _camel_to_upper_snake(graw)
+        known_gender = (
+            "male"
+            if gsn == "MALE"
+            else "female"
+            if gsn == "FEMALE"
+            else "genderless"
+            if "GENDERLESS" in gsn
+            else ""
+        )
+
+    is_shiny = bool(display.get("isShiny"))
+    is_lucky = bool(rec.get("isLucky"))
+
+    moves = rec.get("moves") if isinstance(rec.get("moves"), dict) else {}
+    fast_raw = _strip_known_prefix(str(moves.get("fast") or ""), ["HoloPokemonMove_"])
+    charged_raw = _strip_known_prefix(
+        str(moves.get("charged") or ""), ["HoloPokemonMove_"]
+    )
+
+    # Convert things like ZenHeadbuttFast -> ZEN_HEADBUTT_FAST (so our display normalizer works).
+    fast_token = _camel_to_upper_snake(fast_raw)
+    charged_token = _camel_to_upper_snake(charged_raw)
+
+    iv = rec.get("iv") if isinstance(rec.get("iv"), dict) else {}
+
+    return {
+        "id": str(rec.get("creationTimeMs") or uuid.uuid4()),
+        "number": dex_number,
+        "form": form_token,
+        "name": str(pokemon_name or pokemon_enum_raw or "").replace("_", " ").title(),
+        "cp": rec.get("cp", 0),
+        "hp": rec.get("stamina", 0),
+        "attack": iv.get("atk", 0),
+        "defence": iv.get("def", 0),
+        "stamina": iv.get("sta", 0),
+        "height": rec.get("heightM", 0),
+        "weight": rec.get("weightKg", 0),
+        "gender": known_gender or "",
+        "isshiny": "YES" if is_shiny else "NO",
+        "islucky": "YES" if is_lucky else "NO",
+        "move_1": fast_token,
+        "move_2": charged_token,
+        # Keep a simple hint for downstream consumers too.
+        "gigantamax": bool(dyn.get("isGigantamaxLikely")),
+    }
 
 
 def get_user_files_metadata(user_id):
@@ -1581,31 +1764,81 @@ def upload_json():
         if not isinstance(raw_data, dict):
             return jsonify({"error": "Invalid JSON format. Expected an object"}), 400
 
-        # Check if the data has a fileData wrapper
-        pokemon_data = raw_data.get("fileData", raw_data)
+        # Support multiple export formats:
+        # - Legacy: { fileData: { id: {...}, ... } } or direct dict of pokemon
+        # - New (SpeedUnlocker-style): { pokemons: [ {...}, ... ], slugTemplates: {...}, knownSlugMaps: {...} }
+        is_speedunlocker = isinstance(raw_data.get("pokemons"), list)
+        if is_speedunlocker:
+            pokemon_records = raw_data.get("pokemons")
+        else:
+            pokemon_records = raw_data.get("fileData", raw_data)
 
-        if not isinstance(pokemon_data, dict):
+        if not isinstance(pokemon_records, (dict, list)):
             return jsonify(
-                {"error": "Invalid JSON format. Expected pokemon data as object"}
+                {"error": "Invalid JSON format. Expected pokemon data as dict or list"}
             ), 400
 
         # Track progress by UUID
         file_id = file_uuid
-        total = len(pokemon_data)
+        total = (
+            len(pokemon_records)
+            if isinstance(pokemon_records, list)
+            else len(pokemon_records)
+            if isinstance(pokemon_records, dict)
+            else 0
+        )
         ENRICHMENT_PROGRESS[file_id] = {
             "current": 0,
             "total": total,
             "status": "processing",
         }
 
-        enriched_data = []
-        for idx, (pokemon_id, pokemon) in enumerate(pokemon_data.items()):
-            # Create a copy to avoid modifying the original
-            pokemon_copy = dict(pokemon) if isinstance(pokemon, dict) else {}
-            pokemon_copy["id"] = pokemon_id
-            enriched = enrich_pokemon(pokemon_copy)
-            enriched_data.append(enriched)
-            ENRICHMENT_PROGRESS[file_id]["current"] = idx + 1
+        enriched_data: list[dict] = []
+
+        if isinstance(pokemon_records, dict):
+            for idx, (pokemon_id, pokemon) in enumerate(pokemon_records.items()):
+                pokemon_copy = dict(pokemon) if isinstance(pokemon, dict) else {}
+                pokemon_copy["id"] = pokemon_id
+                enriched = enrich_pokemon(pokemon_copy)
+                enriched_data.append(enriched)
+                ENRICHMENT_PROGRESS[file_id]["current"] = idx + 1
+        elif isinstance(pokemon_records, list):
+            for idx, pokemon in enumerate(pokemon_records):
+                if not isinstance(pokemon, dict):
+                    ENRICHMENT_PROGRESS[file_id]["current"] = idx + 1
+                    continue
+
+                if is_speedunlocker:
+                    mapped = _speedunlocker_to_legacy_payload(pokemon)
+                    enriched = enrich_pokemon(mapped)
+
+                    # Preserve the full original record (ALL fields) without key collisions.
+                    enriched["source"] = pokemon
+
+                    # Surface a few high-value raw fields directly for frontend use.
+                    enriched["hp_max"] = pokemon.get("maxStamina")
+                    enriched["hp_current"] = pokemon.get("stamina")
+                    enriched["cp_multiplier"] = pokemon.get("cpMultiplier")
+                    enriched["captured_s2_cell_id"] = pokemon.get("capturedS2CellId")
+                    enriched["display"] = pokemon.get("display")
+                    enriched["dynamax"] = pokemon.get("dynamax")
+                    enriched["gigantamax"] = bool(
+                        (pokemon.get("dynamax") or {}).get("isGigantamaxLikely")
+                        if isinstance(pokemon.get("dynamax"), dict)
+                        else False
+                    )
+                    enriched["origin"] = pokemon.get("origin")
+                    enriched["trade"] = pokemon.get("trade")
+                    enriched["pokeball"] = pokemon.get("pokeball")
+                    enriched["pokeball_id"] = pokemon.get("pokeballId")
+                else:
+                    pokemon_copy = dict(pokemon)
+                    if "id" not in pokemon_copy:
+                        pokemon_copy["id"] = str(idx)
+                    enriched = enrich_pokemon(pokemon_copy)
+
+                enriched_data.append(enriched)
+                ENRICHMENT_PROGRESS[file_id]["current"] = idx + 1
 
         # Save enriched file
         enriched_path = filepath.replace(".json", "_enriched.json")
@@ -1629,6 +1862,15 @@ def upload_json():
                         "upload_date": datetime.utcnow().isoformat(),
                         "total_pokemon": len(enriched_data),
                         "enriched": True,
+                        "export_format": "speedunlocker"
+                        if is_speedunlocker
+                        else "legacy",
+                        "source_slug_templates": raw_data.get("slugTemplates")
+                        if is_speedunlocker
+                        else None,
+                        "source_known_slug_maps": raw_data.get("knownSlugMaps")
+                        if is_speedunlocker
+                        else None,
                     },
                     f,
                     indent=2,
@@ -1980,6 +2222,26 @@ def apply_search_filter(pokemon_list, search_query):
     for pokemon in pokemon_list:
         match = False
 
+        def _is_gigantamax(p: dict) -> bool:
+            if not isinstance(p, dict):
+                return False
+            if bool(p.get("gigantamax")):
+                return True
+            dyn = p.get("dynamax")
+            return isinstance(dyn, dict) and bool(dyn.get("isGigantamaxLikely"))
+
+        def _is_dynamax_only(p: dict) -> bool:
+            if not isinstance(p, dict):
+                return False
+            if _is_gigantamax(p):
+                return False
+            dyn = p.get("dynamax")
+            if isinstance(dyn, dict):
+                return len(dyn.keys()) > 0
+            if isinstance(dyn, bool):
+                return dyn
+            return False
+
         # Special keywords
         if search_query == "apex":
             if pokemon.get("apex"):
@@ -2079,6 +2341,12 @@ def apply_search_filter(pokemon_list, search_query):
         # Nundo (0/0/0)
         elif search_query == "nundo":
             match = pokemon.get("nundo", False) == True
+
+        # Dynamax / Gigantamax
+        elif search_query in ["gigantamax", "gmax"]:
+            match = _is_gigantamax(pokemon)
+        elif search_query == "dynamax":
+            match = _is_dynamax_only(pokemon)
 
         # Default: search in name or form
         else:
@@ -2283,7 +2551,7 @@ def get_file_data(user_id, file_id):
                     else:
                         enriched_data.append(enrich_pokemon(pcopy))
 
-            # Case 2: dict wrapper (original upload format)
+            # Case 2: dict wrapper (original upload format or SpeedUnlocker export)
             elif isinstance(raw_data, dict):
                 # Guard: sometimes metadata files accidentally sit next to uploads; don't treat them as Pokémon payloads.
                 if (
@@ -2293,24 +2561,52 @@ def get_file_data(user_id, file_id):
                 ):
                     return False
 
-                pokemon_data = raw_data.get("fileData", raw_data)
-                if isinstance(pokemon_data, dict):
-                    for pokemon_id, pokemon in pokemon_data.items():
-                        pokemon_copy = (
-                            dict(pokemon) if isinstance(pokemon, dict) else {}
+                # SpeedUnlocker-style export: { pokemons: [ ... ], slugTemplates: {...}, knownSlugMaps: {...} }
+                if isinstance(raw_data.get("pokemons"), list):
+                    for idx, pokemon in enumerate(raw_data.get("pokemons") or []):
+                        if not isinstance(pokemon, dict):
+                            continue
+                        mapped = _speedunlocker_to_legacy_payload(pokemon)
+                        enriched = enrich_pokemon(mapped)
+                        enriched["source"] = pokemon
+                        enriched["hp_max"] = pokemon.get("maxStamina")
+                        enriched["hp_current"] = pokemon.get("stamina")
+                        enriched["cp_multiplier"] = pokemon.get("cpMultiplier")
+                        enriched["captured_s2_cell_id"] = pokemon.get(
+                            "capturedS2CellId"
                         )
-                        pokemon_copy["id"] = pokemon_id
-                        enriched_data.append(enrich_pokemon(pokemon_copy))
-                elif isinstance(pokemon_data, list):
-                    for idx, pokemon in enumerate(pokemon_data):
-                        pokemon_copy = (
-                            dict(pokemon) if isinstance(pokemon, dict) else {}
+                        enriched["display"] = pokemon.get("display")
+                        enriched["dynamax"] = pokemon.get("dynamax")
+                        enriched["gigantamax"] = bool(
+                            (pokemon.get("dynamax") or {}).get("isGigantamaxLikely")
+                            if isinstance(pokemon.get("dynamax"), dict)
+                            else False
                         )
-                        if "id" not in pokemon_copy:
-                            pokemon_copy["id"] = str(idx)
-                        enriched_data.append(enrich_pokemon(pokemon_copy))
+                        enriched["origin"] = pokemon.get("origin")
+                        enriched["trade"] = pokemon.get("trade")
+                        enriched["pokeball"] = pokemon.get("pokeball")
+                        enriched["pokeball_id"] = pokemon.get("pokeballId")
+                        enriched_data.append(enriched)
+                    # fall through to save
                 else:
-                    return False
+                    pokemon_data = raw_data.get("fileData", raw_data)
+                    if isinstance(pokemon_data, dict):
+                        for pokemon_id, pokemon in pokemon_data.items():
+                            pokemon_copy = (
+                                dict(pokemon) if isinstance(pokemon, dict) else {}
+                            )
+                            pokemon_copy["id"] = pokemon_id
+                            enriched_data.append(enrich_pokemon(pokemon_copy))
+                    elif isinstance(pokemon_data, list):
+                        for idx, pokemon in enumerate(pokemon_data):
+                            pokemon_copy = (
+                                dict(pokemon) if isinstance(pokemon, dict) else {}
+                            )
+                            if "id" not in pokemon_copy:
+                                pokemon_copy["id"] = str(idx)
+                            enriched_data.append(enrich_pokemon(pokemon_copy))
+                    else:
+                        return False
             else:
                 return False
 
@@ -2451,12 +2747,34 @@ def get_file_data(user_id, file_id):
         order_by = request.args.get("order_by", "number")
         order_dir = request.args.get("order_dir", "asc")
         unique_only = request.args.get("unique", "").lower() == "true"
+        dynamax_only = _parse_bool_arg(request.args.get("dynamax"))
+        gigantamax_only = _parse_bool_arg(request.args.get("gigantamax"))
         pvp_enabled = request.args.get("pvp", "").lower() == "true"
         best_teams_enabled = _parse_bool_arg(request.args.get("best_teams"))
         pvp_league = (request.args.get("league", "GL") or "GL").upper()
         pvp_category = (request.args.get("category", "overall") or "overall").lower()
         if pvp_category not in PVP_CATEGORIES:
             pvp_category = "overall"
+
+        def _is_gigantamax(p: dict) -> bool:
+            if not isinstance(p, dict):
+                return False
+            if bool(p.get("gigantamax")):
+                return True
+            dyn = p.get("dynamax")
+            return isinstance(dyn, dict) and bool(dyn.get("isGigantamaxLikely"))
+
+        def _is_dynamax_only(p: dict) -> bool:
+            if not isinstance(p, dict):
+                return False
+            if _is_gigantamax(p):
+                return False
+            dyn = p.get("dynamax")
+            if isinstance(dyn, dict):
+                return len(dyn.keys()) > 0
+            if isinstance(dyn, bool):
+                return dyn
+            return False
 
         # Apply advanced search filter
         if search:
@@ -2469,6 +2787,21 @@ def get_file_data(user_id, file_id):
             print("[DEBUG] Applying unique filter")
             data = filter_unique_pokemon(data)
             print(f"[DEBUG] After unique filter: {len(data)} pokemon")
+
+        # Optional explicit Dynamax/Gigantamax filtering.
+        # - gigantamax=true => only Gigantamax
+        # - dynamax=true => only Dynamax (excluding Gigantamax)
+        # - both true => any Max (union)
+        if dynamax_only or gigantamax_only:
+            if dynamax_only and gigantamax_only:
+                data = [p for p in data if _is_dynamax_only(p) or _is_gigantamax(p)]
+            elif gigantamax_only:
+                data = [p for p in data if _is_gigantamax(p)]
+            else:
+                data = [p for p in data if _is_dynamax_only(p)]
+            print(
+                f"[DEBUG] After max filter (dynamax={dynamax_only}, gigantamax={gigantamax_only}): {len(data)} pokemon"
+            )
 
         # Apply PVP filter if requested (Best Teams implies PVP)
         if best_teams_enabled:

@@ -10,6 +10,7 @@ interface PokemonImageProps {
   containerWidth?: number;
   containerHeight?: number;
   minPx?: number;
+  heightMultiplier?: number;
 }
 
 const S3_BASE_URL = "https://s3.us-west-004.backblazeb2.com/pokedeiz/animated/";
@@ -24,6 +25,7 @@ const PokemonImage: React.FC<PokemonImageProps> = ({
   containerWidth = 240,
   containerHeight = 120,
   minPx = 60,
+  heightMultiplier = 1,
 }) => {
   const [imgSrc, setImgSrc] = useState<string>(staticSrc);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -40,6 +42,11 @@ const PokemonImage: React.FC<PokemonImageProps> = ({
     // Double the size for static images (when no animatedSrc)
     return animatedSrc ? calculatedHeight / 1.2 : calculatedHeight * 3;
   }, [pokemonHeight, tallestHeight, containerHeight, minPx, animatedSrc]);
+
+  const finalHeightPx = useMemo(() => {
+    const m = Number.isFinite(heightMultiplier) ? heightMultiplier : 1;
+    return targetHeightPx * (m > 0 ? m : 1);
+  }, [targetHeightPx, heightMultiplier]);
 
   useEffect(() => {
     // Reset to animated on mount if available
@@ -73,10 +80,12 @@ const PokemonImage: React.FC<PokemonImageProps> = ({
       alt={alt}
       className={className}
       style={{
-        height: `${targetHeightPx}px`,
+        height: `${finalHeightPx}px`,
         width: "auto",
         maxWidth: `${containerWidth}px`,
-        maxHeight: `${containerHeight * 1.1}px`,
+        maxHeight: `${
+          containerHeight * 1.1 * (heightMultiplier > 0 ? heightMultiplier : 1)
+        }px`,
         objectFit: "contain",
         imageRendering: "pixelated",
         opacity: isLoading ? 0.5 : 1,

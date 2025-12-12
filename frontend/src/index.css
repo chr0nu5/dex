@@ -56,3 +56,23 @@ code {
   -webkit-filter: drop-shadow(0 0 10px #ff00ff) drop-shadow(0 0 15px #00ffff) drop-shadow(0 0 20px rgba(255, 255, 0, 0.6));
   filter: drop-shadow(0 0 10px #ff00ff) drop-shadow(0 0 15px #00ffff) drop-shadow(0 0 20px rgba(255, 255, 0, 0.6));
 }
+
+/* Dynamax/Gigantamax Effect - Red Glow on Pokemon Image */
+.pokemon-dynamax {
+  -webkit-filter: drop-shadow(0 0 8px #ff4d4f)
+    drop-shadow(0 0 12px rgba(255, 77, 79, 0.45));
+  filter: drop-shadow(0 0 8px #ff4d4f)
+    drop-shadow(0 0 12px rgba(255, 77, 79, 0.45));
+}
+
+/* When both apply, mix gold (shiny) + red (dynamax) */
+.pokemon-shiny.pokemon-dynamax {
+  -webkit-filter: drop-shadow(0 0 8px gold)
+    drop-shadow(0 0 12px rgba(255, 215, 0, 0.45))
+    drop-shadow(0 0 8px #ff4d4f)
+    drop-shadow(0 0 12px rgba(255, 77, 79, 0.45));
+  filter: drop-shadow(0 0 8px gold)
+    drop-shadow(0 0 12px rgba(255, 215, 0, 0.45))
+    drop-shadow(0 0 8px #ff4d4f)
+    drop-shadow(0 0 12px rgba(255, 77, 79, 0.45));
+}

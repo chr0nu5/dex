@@ -319,6 +319,14 @@ select.liquid-glass-select option {
   z-index: 10;
 }
 
+.pokeball-overlay {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pokemon-card-wrapper:hover .pokeball-overlay {
+  transform: translateY(-6px);
+}
+
 /* Shiny Card - Golden Dark Theme */
 .pokemon-card.shiny-card {
   background: linear-gradient(145deg, #2d2416, #3d3420);
