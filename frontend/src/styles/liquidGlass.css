@@ -112,7 +112,8 @@
   box-sizing: border-box;
 }
 
-.liquid-glass-select {
+/* Native <select> styling */
+select.liquid-glass-select {
   background: #25253a;
   border: 1px solid #3a3a54;
   border-radius: 8px;
@@ -128,19 +129,82 @@
   transition: all 0.2s ease;
 }
 
-.liquid-glass-select:hover {
+/* Ant Design Select (keep same visual language as native select) */
+.liquid-glass-select.ant-select {
+  min-width: 200px;
+}
+
+.liquid-glass-select.ant-select .ant-select-selector {
+  background: #25253a !important;
+  border: 1px solid #3a3a54 !important;
+  border-radius: 8px !important;
+  height: 48px !important;
+  padding: 0 18px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.liquid-glass-select.ant-select .ant-select-selection-item,
+.liquid-glass-select.ant-select .ant-select-selection-placeholder {
+  line-height: 46px !important;
+  color: #e0e0e0;
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.liquid-glass-select.ant-select .ant-select-selection-placeholder {
+  color: #8888aa;
+  font-weight: 400;
+}
+
+.liquid-glass-select.ant-select .ant-select-arrow,
+.liquid-glass-select.ant-select .ant-select-clear {
+  color: #e0e0e0;
+}
+
+.liquid-glass-select.ant-select:not(.ant-select-disabled):hover .ant-select-selector {
+  background: #2d2d44 !important;
+  border-color: #4a4a6a !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.liquid-glass-select.ant-select.ant-select-focused .ant-select-selector {
+  outline: none;
+  border-color: #5555ff !important;
+  box-shadow: 0 0 0 3px rgba(85, 85, 255, 0.1) !important;
+}
+
+.liquid-glass-select-dropdown {
+  background: #1e1e2e !important;
+  border: 1px solid #2d2d44 !important;
+}
+
+.liquid-glass-select-dropdown .ant-select-item {
+  color: #e0e0e0;
+}
+
+.liquid-glass-select-dropdown .ant-select-item-option-active {
+  background: rgba(85, 85, 255, 0.12) !important;
+}
+
+.liquid-glass-select-dropdown .ant-select-item-option-selected {
+  background: rgba(85, 85, 255, 0.18) !important;
+}
+
+select.liquid-glass-select:hover {
   background: #2d2d44;
   border-color: #4a4a6a;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-.liquid-glass-select:focus {
+select.liquid-glass-select:focus {
   outline: none;
   border-color: #5555ff;
   box-shadow: 0 0 0 3px rgba(85, 85, 255, 0.1);
 }
 
-.liquid-glass-select option {
+select.liquid-glass-select option {
   background: #1e1e2e;
   color: #e0e0e0;
 }

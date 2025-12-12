@@ -2,7 +2,6 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import Home from "./pages/Home";
-import DexPage from "./pages/DexPage";
 import GeneratorPage from "./pages/GeneratorPage";
 import DexViewer from "./pages/DexViewer";
 import LoadingOverlay from "./components/LoadingOverlay";
@@ -23,7 +22,7 @@ const App: React.FC = () => {
           <LoadingOverlay />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/dex" element={<DexPage />} />
+            <Route path="/dex" element={<DexViewer />} />
             <Route path="/dex/:fileId" element={<DexViewer />} />
             <Route path="/generator" element={<GeneratorPage />} />
           </Routes>

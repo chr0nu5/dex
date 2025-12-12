@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FixedSizeGrid as Grid } from "react-window";
-import { Tag, Card, Button, Switch } from "antd";
+import { Tag, Card, Button, Switch, message, Progress, Select } from "antd";
 import {
   ThunderboltOutlined,
   SafetyOutlined,
@@ -61,6 +61,33 @@ interface UserFile {
   date?: string | null;
 }
 
+interface ProgressData {
+  current: number;
+  total: number;
+  status: string;
+}
+
+const SORT_OPTIONS = [
+  { value: "number-asc", label: "Number ↑" },
+  { value: "number-desc", label: "Number ↓" },
+  { value: "name-asc", label: "Name ↑" },
+  { value: "name-desc", label: "Name ↓" },
+  { value: "cp-asc", label: "CP ↑" },
+  { value: "cp-desc", label: "CP ↓" },
+  { value: "height-asc", label: "Height ↑" },
+  { value: "height-desc", label: "Height ↓" },
+  { value: "weight-asc", label: "Weight ↑" },
+  { value: "weight-desc", label: "Weight ↓" },
+  { value: "iv-asc", label: "IV ↑" },
+  { value: "iv-desc", label: "IV ↓" },
+  { value: "attack-asc", label: "Attack ↑" },
+  { value: "attack-desc", label: "Attack ↓" },
+  { value: "defense-asc", label: "Defense ↑" },
+  { value: "defense-desc", label: "Defense ↓" },
+  { value: "stamina-asc", label: "Stamina ↑" },
+  { value: "stamina-desc", label: "Stamina ↓" },
+];
+
 const CARD_WIDTH = 240;
 const CARD_HEIGHT = 380;
 const GAP = 48;
@@ -76,6 +103,11 @@ const DexViewer: React.FC = () => {
   const [orderDir, setOrderDir] = useState("asc");
   const [uniqueOnly, setUniqueOnly] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [snorlaxOpen, setSnorlaxOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [uploadFileId, setUploadFileId] = useState<string | null>(null);
   const [pvpEnabled, setPvpEnabled] = useState(false);
   const [pvpLeague, setPvpLeague] = useState<"GL" | "UL" | "ML">("GL");
   const [pvpCategory, setPvpCategory] = useState("overall");
@@ -87,6 +119,20 @@ const DexViewer: React.FC = () => {
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const userId = getUserId();
+
+  const loadUserFiles = useCallback(async () => {
+    try {
+      const response = await apiClient.getUserFiles(userId);
+      setUserFiles(response.files || []);
+    } catch (error) {
+      console.error("Error loading user files:", error);
+      setUserFiles([]);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    loadUserFiles();
+  }, [loadUserFiles]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -118,7 +164,6 @@ const DexViewer: React.FC = () => {
 
   useEffect(() => {
     loadFileData();
-    loadUserFiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fileId,
@@ -131,6 +176,34 @@ const DexViewer: React.FC = () => {
     pvpCategory,
     bestTeamsEnabled,
   ]);
+
+  // Poll progress during upload (only used on the /dex "empty" state)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!uploadFileId || !uploading) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const prog = await apiClient.getProgress(uploadFileId);
+        setProgress(prog);
+
+        if (prog.status === "completed") {
+          setUploading(false);
+          setProgress(null);
+
+          // Refresh select list and open the newly uploaded file.
+          await loadUserFiles();
+          message.success("File enriched successfully!");
+          navigate(`/dex/${uploadFileId}`);
+          setUploadFileId(null);
+        }
+      } catch (error) {
+        console.error("Error polling progress:", error);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [uploadFileId, uploading, navigate, loadUserFiles]);
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -177,7 +250,11 @@ const DexViewer: React.FC = () => {
   };
 
   const loadFileData = async () => {
-    if (!fileId) return;
+    if (!fileId) {
+      setFileData(null);
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -193,35 +270,131 @@ const DexViewer: React.FC = () => {
       });
       setFileData(data);
     } catch (error) {
-      console.error("Error loading file data:", error);
+      try {
+        const data = await apiClient.getPublicFileData(fileId, {
+          search: debouncedSearch,
+          order_by: orderBy,
+          order_dir: orderDir,
+          unique: uniqueOnly,
+          pvp: pvpEnabled,
+          league: pvpLeague,
+          category: pvpCategory,
+          best_teams: bestTeamsEnabled,
+        });
+        setFileData(data);
+      } catch (error2) {
+        console.error("Error loading file data:", error);
+        console.error("Error loading public file data:", error2);
+        setFileData(null);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const loadUserFiles = async () => {
+  const getFileDisplayName = useCallback((file: UserFile) => {
+    let displayName = file.filename.replace(".json", "");
+
+    if (file.user && file.date) {
+      const date = new Date(file.date);
+      const formattedDate = date.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+      displayName = `${file.user} - ${formattedDate}`;
+    }
+
+    return displayName;
+  }, []);
+
+  const fileSelectOptions = useMemo(() => {
+    const opts = userFiles.map((file) => ({
+      value: file.file_id,
+      label: getFileDisplayName(file),
+    }));
+
+    // If we opened a public/shared link, show it in the Select even if it's not part of the user's list.
+    if (fileId && fileData?.metadata?.filename) {
+      const exists = opts.some((o) => o.value === fileId);
+      if (!exists) {
+        const base = String(fileData.metadata.filename).replace(/\.json$/i, "");
+        opts.unshift({ value: fileId, label: `${base} (shared)` });
+      }
+    }
+
+    return opts;
+  }, [userFiles, getFileDisplayName, fileId, fileData]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+    setSnorlaxOpen(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    setSnorlaxOpen(false);
+  }, []);
+
+  const uploadFile = async (file: File) => {
     try {
-      const response = await apiClient.getUserFiles(userId);
-      setUserFiles(response.files || []);
-    } catch (error) {
-      console.error("Error loading user files:", error);
-      setUserFiles([]);
+      setUploading(true);
+      setProgress({ current: 0, total: 100, status: "uploading" });
+
+      const response = await apiClient.uploadFile("/api/upload", file, {
+        user_id: userId,
+      });
+
+      message.success(`Uploaded: ${response.filename}`);
+
+      // Refresh the select list immediately so the new JSON appears.
+      await loadUserFiles();
+
+      setUploadFileId(response.file_id);
+      setProgress({
+        current: 0,
+        total: response.total_pokemon,
+        status: "processing",
+      });
+    } catch (error: any) {
+      message.error(`Upload failed: ${error.message}`);
+      setUploading(false);
+      setProgress(null);
+      setUploadFileId(null);
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newFileId = event.target.value;
-    if (newFileId) {
-      navigate(`/dex/${newFileId}`);
-    }
-  };
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      setSnorlaxOpen(false);
+
+      const files = e.dataTransfer.files;
+      if (files.length === 0) {
+        message.error("No file was dropped!");
+        return;
+      }
+
+      const file = files[0];
+      if (!file.name.endsWith(".json")) {
+        message.error("Please upload a JSON file!");
+        return;
+      }
+
+      await uploadFile(file);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [userId]
+  );
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
   };
 
-  const handleSortChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value;
+  const handleSortChange = (value: string) => {
     const [field, direction] = value.split("-");
     setOrderBy(field);
     setOrderDir(direction);
@@ -1617,6 +1790,7 @@ const DexViewer: React.FC = () => {
   return (
     <div style={{ minHeight: "100vh", paddingTop: "80px" }}>
       <header className="liquid-glass-header">
+        {/** When no JSON is selected (/dex), keep controls disabled (except Home + JSON picker). */}
         <Button
           icon={<HomeOutlined />}
           onClick={() => navigate("/")}
@@ -1643,32 +1817,19 @@ const DexViewer: React.FC = () => {
           }}
         />
 
-        <select
+        <Select
           className="liquid-glass-select"
-          value={fileId || ""}
-          onChange={handleFileChange}
-        >
-          {userFiles.map((file) => {
-            let displayName = file.filename.replace(".json", "");
-
-            if (file.user && file.date) {
-              // Format date to DD/MM/YYYY
-              const date = new Date(file.date);
-              const formattedDate = date.toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              });
-              displayName = `${file.user} - ${formattedDate}`;
-            }
-
-            return (
-              <option key={file.file_id} value={file.file_id}>
-                {displayName}
-              </option>
-            );
-          })}
-        </select>
+          value={fileId || undefined}
+          placeholder="Select a JSON"
+          allowClear
+          options={fileSelectOptions}
+          onChange={(value) => {
+            if (value) navigate(`/dex/${value}`);
+            else navigate("/dex");
+          }}
+          style={{ minWidth: 240, height: 48 }}
+          popupClassName="liquid-glass-select-dropdown"
+        />
 
         <input
           type="text"
@@ -1676,6 +1837,7 @@ const DexViewer: React.FC = () => {
           placeholder="Search Pokémon..."
           value={searchQuery}
           onChange={handleSearchChange}
+          disabled={!fileId}
           style={{ flex: "1 1 260px", minWidth: "200px" }}
         />
 
@@ -1701,7 +1863,11 @@ const DexViewer: React.FC = () => {
           >
             Unique
           </span>
-          <Switch checked={uniqueOnly} onChange={handleUniqueToggle} />
+          <Switch
+            checked={uniqueOnly}
+            onChange={handleUniqueToggle}
+            disabled={!fileId}
+          />
         </div>
 
         <div
@@ -1726,7 +1892,11 @@ const DexViewer: React.FC = () => {
           >
             PvP
           </span>
-          <Switch checked={pvpEnabled} onChange={handlePvpToggle} />
+          <Switch
+            checked={pvpEnabled}
+            onChange={handlePvpToggle}
+            disabled={!fileId}
+          />
         </div>
 
         {pvpEnabled && (
@@ -1752,64 +1922,52 @@ const DexViewer: React.FC = () => {
             >
               BEST TEAMS
             </span>
-            <Switch checked={bestTeamsEnabled} onChange={setBestTeamsEnabled} />
+            <Switch
+              checked={bestTeamsEnabled}
+              onChange={setBestTeamsEnabled}
+              disabled={!fileId}
+            />
           </div>
         )}
 
         {!pvpEnabled && (
-          <select
+          <Select
             className="liquid-glass-select"
             value={`${orderBy}-${orderDir}`}
             onChange={handleSortChange}
-            style={{ minWidth: "180px" }}
-          >
-            <option value="number-asc">Number ↑</option>
-            <option value="number-desc">Number ↓</option>
-            <option value="name-asc">Name ↑</option>
-            <option value="name-desc">Name ↓</option>
-            <option value="cp-asc">CP ↑</option>
-            <option value="cp-desc">CP ↓</option>
-            <option value="height-asc">Height ↑</option>
-            <option value="height-desc">Height ↓</option>
-            <option value="weight-asc">Weight ↑</option>
-            <option value="weight-desc">Weight ↓</option>
-            <option value="iv-asc">IV ↑</option>
-            <option value="iv-desc">IV ↓</option>
-            <option value="attack-asc">Attack ↑</option>
-            <option value="attack-desc">Attack ↓</option>
-            <option value="defense-asc">Defense ↑</option>
-            <option value="defense-desc">Defense ↓</option>
-            <option value="stamina-asc">Stamina ↑</option>
-            <option value="stamina-desc">Stamina ↓</option>
-          </select>
+            options={SORT_OPTIONS}
+            style={{ minWidth: 180, height: 48 }}
+            popupClassName="liquid-glass-select-dropdown"
+            disabled={!fileId}
+          />
         )}
 
         {pvpEnabled && (
-          <select
+          <Select
             className="liquid-glass-select"
             value={pvpLeague}
-            onChange={(e) => setPvpLeague(e.target.value as any)}
-            style={{ minWidth: "140px" }}
-          >
-            <option value="GL">Great League</option>
-            <option value="UL">Ultra League</option>
-            <option value="ML">Master League</option>
-          </select>
+            onChange={(value) => setPvpLeague(value as any)}
+            options={[
+              { value: "GL", label: "Great League" },
+              { value: "UL", label: "Ultra League" },
+              { value: "ML", label: "Master League" },
+            ]}
+            style={{ minWidth: 160, height: 48 }}
+            popupClassName="liquid-glass-select-dropdown"
+            disabled={!fileId}
+          />
         )}
 
         {pvpEnabled && (
-          <select
+          <Select
             className="liquid-glass-select"
             value={pvpCategory}
-            onChange={(e) => setPvpCategory(e.target.value)}
-            style={{ minWidth: "180px" }}
-          >
-            {pvpCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setPvpCategory(String(value))}
+            options={pvpCategories.map((c) => ({ value: c, label: c }))}
+            style={{ minWidth: 180, height: 48 }}
+            popupClassName="liquid-glass-select-dropdown"
+            disabled={!fileId}
+          />
         )}
 
         <div
@@ -1825,6 +1983,7 @@ const DexViewer: React.FC = () => {
             fontWeight: "600",
             fontSize: "16px",
             whiteSpace: "nowrap",
+            opacity: fileId ? 1 : 0.5,
           }}
         >
           {fileData ? fileData.pokemon.length : 0}{" "}
@@ -1842,7 +2001,109 @@ const DexViewer: React.FC = () => {
           overflow: "visible",
         }}
       >
-        {loading ? (
+        {!fileId ? (
+          <div
+            style={{
+              minHeight: "calc(100vh - 80px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "40px",
+            }}
+          >
+            <div
+              className={`liquid-glass-dropzone ${
+                isDragOver ? "drag-over" : ""
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{
+                width: "600px",
+                minHeight: "400px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "40px",
+                textAlign: "center",
+              }}
+            >
+              <img
+                src={snorlaxOpen ? "/img/open.png" : "/img/closed.png"}
+                alt="Snorlax"
+                style={{
+                  width: "200px",
+                  height: "auto",
+                  marginBottom: "30px",
+                  transition: "all 0.3s ease",
+                  filter: "drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5))",
+                }}
+              />
+
+              <div
+                style={{
+                  color: "#e0e0e0",
+                  fontSize: "20px",
+                  fontWeight: "400",
+                  textShadow: "0 2px 4px rgba(0, 0, 0, 0.8)",
+                  width: "100%",
+                }}
+              >
+                {uploading ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "600",
+                        marginBottom: "20px",
+                        color: "#ffffff",
+                      }}
+                    >
+                      {progress?.status === "uploading"
+                        ? "Uploading..."
+                        : "Enriching Pokémon..."}
+                    </div>
+                    <Progress
+                      percent={
+                        progress
+                          ? Math.round(
+                              (progress.current / progress.total) * 100
+                            )
+                          : 0
+                      }
+                      status="active"
+                      strokeColor={{
+                        "0%": "#5555ff",
+                        "100%": "#8a2be2",
+                      }}
+                      style={{ marginBottom: "10px" }}
+                    />
+                    <div style={{ fontSize: "16px", color: "#b0b0c0" }}>
+                      {progress?.current} / {progress?.total}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "600",
+                        marginBottom: "10px",
+                        color: "#ffffff",
+                      }}
+                    >
+                      {isDragOver ? "Drop it here!" : "Drop your JSON here"}
+                    </div>
+                    <div style={{ fontSize: "16px", color: "#b0b0c0" }}>
+                      Snorlax is waiting...
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : loading ? (
           <div
             style={{
               textAlign: "center",

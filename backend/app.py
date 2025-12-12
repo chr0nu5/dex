@@ -1210,25 +1210,157 @@ def get_user_files_metadata(user_id):
     if not os.path.exists(uploads_dir):
         return []
 
-    files = []
-    for filename in os.listdir(uploads_dir):
+    def _is_uuid(s: str) -> bool:
+        try:
+            uuid.UUID(s)
+            return True
+        except Exception:
+            return False
+
+    def _meta_path(file_uuid: str) -> str:
+        return os.path.join(uploads_dir, f"{file_uuid}.meta.json")
+
+    def _read_meta(file_uuid: str) -> dict:
+        try:
+            mp = _meta_path(file_uuid)
+            if os.path.exists(mp):
+                with open(mp, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            pass
+        return {}
+
+    def _write_meta(file_uuid: str, meta: dict) -> None:
+        try:
+            mp = _meta_path(file_uuid)
+            tmp = f"{mp}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+            os.replace(tmp, mp)
+        except Exception:
+            pass
+
+    def _public_index_path() -> str:
+        return os.path.join(uploads_dir, "..", "public_index.json")
+
+    def _load_public_index() -> dict:
+        p = os.path.abspath(_public_index_path())
+        try:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            pass
+        return {}
+
+    def _save_public_index(idx: dict) -> None:
+        p = os.path.abspath(_public_index_path())
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            tmp = f"{p}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(idx, f, indent=2)
+            os.replace(tmp, p)
+        except Exception:
+            pass
+
+    def _register_public(file_uuid: str, original_filename: str | None) -> None:
+        try:
+            idx = _load_public_index()
+            idx[file_uuid] = {
+                "user_id": user_id,
+                "original_filename": original_filename,
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            _save_public_index(idx)
+        except Exception:
+            pass
+
+    # One-time lazy migration: legacy files were stored as <original_filename>.json.
+    # Convert them to UUID-based ids (<uuid>.json) while preserving the original filename in a meta file.
+    for filename in list(os.listdir(uploads_dir)):
+        if not filename.endswith(".json"):
+            continue
         if filename.endswith("_enriched.json"):
             continue
+        if filename.endswith(".meta.json"):
+            continue
+
+        base = filename[:-5]
+        if _is_uuid(base):
+            # Ensure meta exists for UUID files (best-effort).
+            meta = _read_meta(base)
+            if not meta:
+                _write_meta(
+                    base,
+                    {
+                        "original_filename": filename,
+                        "legacy_id": None,
+                    },
+                )
+            continue
+
+        # Legacy file (non-UUID): rename to UUID and create meta.
+        new_uuid = str(uuid.uuid4())
+        old_path = os.path.join(uploads_dir, filename)
+        new_path = os.path.join(uploads_dir, f"{new_uuid}.json")
+
+        enriched_old = os.path.join(
+            uploads_dir, filename.replace(".json", "_enriched.json")
+        )
+        enriched_new = os.path.join(uploads_dir, f"{new_uuid}_enriched.json")
+
+        try:
+            os.replace(old_path, new_path)
+            if os.path.exists(enriched_old):
+                os.replace(enriched_old, enriched_new)
+        except Exception:
+            # If migration fails, keep the file as-is.
+            continue
+
+        _write_meta(
+            new_uuid,
+            {
+                "original_filename": filename,
+                "legacy_id": base,
+            },
+        )
+        _register_public(new_uuid, filename)
+
+    files = []
+    for filename in os.listdir(uploads_dir):
         if not filename.endswith(".json"):
+            continue
+        if filename.endswith("_enriched.json"):
+            continue
+        if filename.endswith(".meta.json"):
             continue
 
         filepath = os.path.join(uploads_dir, filename)
-        enriched_path = filepath.replace(".json", "_enriched.json")
-
         stat = os.stat(filepath)
-        user, date = extract_metadata_from_filename(filename)
+
+        # Guard: ignore tiny JSONs that are almost certainly not real Pokémon payloads
+        # (e.g., accidentally-migrated meta JSONs). Real exports are typically much larger.
+        if stat.st_size < 1024:
+            continue
 
         file_id_clean = filename.replace(".json", "")
+        meta = _read_meta(file_id_clean) if _is_uuid(file_id_clean) else {}
+        original_filename = meta.get("original_filename") if meta else None
+        if not original_filename:
+            original_filename = filename
+
+        enriched_path = os.path.join(uploads_dir, f"{file_id_clean}_enriched.json")
+
+        user, date = extract_metadata_from_filename(original_filename)
+
         files.append(
             {
                 "id": file_id_clean,
-                "file_id": file_id_clean,  # Explicitly include file_id for clarity
-                "filename": filename,
+                "file_id": file_id_clean,
+                "filename": original_filename,
                 "user": user,
                 "date": date,
                 "upload_date": datetime.fromtimestamp(stat.st_mtime).isoformat(),
@@ -1417,8 +1549,9 @@ def upload_json():
     user_dir = os.path.join(os.path.dirname(__file__), "uploads", user_id)
     os.makedirs(user_dir, exist_ok=True)
 
-    # Save original file
-    filepath = os.path.join(user_dir, file.filename)
+    # Store under a UUID so /dex/<uuid> can be shared publicly.
+    file_uuid = str(uuid.uuid4())
+    filepath = os.path.join(user_dir, f"{file_uuid}.json")
     file.save(filepath)
 
     # Parse and enrich
@@ -1437,8 +1570,8 @@ def upload_json():
                 {"error": "Invalid JSON format. Expected pokemon data as object"}
             ), 400
 
-        # Track progress
-        file_id = file.filename.replace(".json", "")
+        # Track progress by UUID
+        file_id = file_uuid
         total = len(pokemon_data)
         ENRICHMENT_PROGRESS[file_id] = {
             "current": 0,
@@ -1464,10 +1597,53 @@ def upload_json():
 
         user, date = extract_metadata_from_filename(file.filename)
 
+        # Save per-file meta (preserve original filename for display)
+        try:
+            meta_path = os.path.join(user_dir, f"{file_uuid}.meta.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "original_filename": file.filename,
+                        "legacy_id": file.filename.replace(".json", ""),
+                        "user": user,
+                        "date": date,
+                        "upload_date": datetime.utcnow().isoformat(),
+                        "total_pokemon": len(enriched_data),
+                        "enriched": True,
+                    },
+                    f,
+                    indent=2,
+                )
+        except Exception:
+            pass
+
+        # Register in a global public index so /dex/<uuid> is publicly shareable.
+        try:
+            public_index_path = os.path.join(
+                os.path.dirname(__file__), "uploads", "public_index.json"
+            )
+            idx = {}
+            if os.path.exists(public_index_path):
+                with open(public_index_path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    idx = loaded
+            idx[file_uuid] = {
+                "user_id": user_id,
+                "original_filename": file.filename,
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            tmp = f"{public_index_path}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(idx, f, indent=2)
+            os.replace(tmp, public_index_path)
+        except Exception:
+            pass
+
         return jsonify(
             {
                 "message": "File uploaded and enriched successfully",
-                "file_id": file_id,
+                "file_id": file_uuid,
                 "filename": file.filename,
                 "user": user,
                 "date": date,
@@ -1504,11 +1680,96 @@ def get_pvp_categories():
     return jsonify({"categories": PVP_CATEGORIES})
 
 
+@app.route("/api/public/file/<file_id>", methods=["GET"])
+def get_public_file_data(file_id):
+    """Public (shareable) read-only access to a file by UUID.
+
+    This does NOT add the file to the visitor's list; it only serves the data.
+    """
+    try:
+        # Only UUIDs are supported for public access.
+        uuid.UUID(str(file_id))
+    except Exception:
+        return jsonify({"error": "Invalid file id"}), 400
+
+    public_index_path = os.path.join(
+        os.path.dirname(__file__), "uploads", "public_index.json"
+    )
+    if not os.path.exists(public_index_path):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        with open(public_index_path, "r", encoding="utf-8") as f:
+            idx = json.load(f)
+        if not isinstance(idx, dict):
+            return jsonify({"error": "File not found"}), 404
+        entry = idx.get(str(file_id))
+        if not isinstance(entry, dict):
+            return jsonify({"error": "File not found"}), 404
+        user_id = entry.get("user_id")
+        if not user_id:
+            return jsonify({"error": "File not found"}), 404
+    except Exception:
+        return jsonify({"error": "File not found"}), 404
+
+    # Reuse the existing per-user loader by calling the same logic as /api/file.
+    # This keeps filtering, sorting, PvP, Best Teams behavior identical.
+    return get_file_data(user_id, str(file_id))
+
+
 @app.route("/api/file/<user_id>/<path:file_id>", methods=["DELETE"])
 def delete_file(user_id, file_id):
     """Delete a file and its enriched version"""
     try:
         user_dir = os.path.join(os.path.dirname(__file__), "uploads", user_id)
+
+        # If this is a UUID id, delete the UUID-named files (+ meta) and unregister from public index.
+        try:
+            uuid.UUID(str(file_id))
+            uuid_id = str(file_id)
+            deleted_files = []
+
+            for fn in [
+                f"{uuid_id}.json",
+                f"{uuid_id}_enriched.json",
+                f"{uuid_id}.meta.json",
+            ]:
+                fp = os.path.join(user_dir, fn)
+                if os.path.exists(fp):
+                    os.remove(fp)
+                    deleted_files.append(fn)
+
+            # Best-effort: remove from global public index
+            try:
+                public_index_path = os.path.join(
+                    os.path.dirname(__file__), "uploads", "public_index.json"
+                )
+                if os.path.exists(public_index_path):
+                    with open(public_index_path, "r", encoding="utf-8") as f:
+                        idx = json.load(f)
+                    if isinstance(idx, dict) and uuid_id in idx:
+                        idx.pop(uuid_id, None)
+                        tmp = f"{public_index_path}.tmp"
+                        with open(tmp, "w", encoding="utf-8") as f:
+                            json.dump(idx, f, indent=2)
+                        os.replace(tmp, public_index_path)
+            except Exception:
+                pass
+
+            if deleted_files:
+                return (
+                    jsonify(
+                        {
+                            "success": True,
+                            "message": f"Deleted {len(deleted_files)} file(s)",
+                            "deleted_files": deleted_files,
+                        }
+                    ),
+                    200,
+                )
+            return jsonify({"error": "File not found"}), 404
+        except Exception:
+            pass
 
         # Try both formats: direct filename and user-date format
         possible_files = []
@@ -1868,11 +2129,131 @@ def get_file_data(user_id, file_id):
 
     file_id = unquote(file_id)
 
+    def _is_uuid(s: str) -> bool:
+        try:
+            uuid.UUID(s)
+            return True
+        except Exception:
+            return False
+
+    def _read_meta(fid: str) -> dict:
+        try:
+            mp = os.path.join(user_dir, f"{fid}.meta.json")
+            if os.path.exists(mp):
+                with open(mp, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                return meta if isinstance(meta, dict) else {}
+        except Exception:
+            pass
+        return {}
+
+    def _build_enriched_from_raw(raw_path: str, out_path: str) -> bool:
+        """Best-effort: build <uuid>_enriched.json from the raw uploaded JSON.
+
+        This makes the system resilient when legacy uploads exist without an enriched
+        companion file (or when a migration didn't move it).
+        """
+        try:
+            with open(raw_path, "r", encoding="utf-8") as f:
+                raw_data = json.load(f)
+
+            enriched_data: list[dict] = []
+
+            # Case 1: already a list (might already be enriched)
+            if isinstance(raw_data, list):
+                for idx, p in enumerate(raw_data):
+                    if not isinstance(p, dict):
+                        continue
+                    pcopy = dict(p)
+                    if "id" not in pcopy:
+                        pcopy["id"] = str(pcopy.get("id") or idx)
+                    # If it already looks enriched, keep it; otherwise enrich.
+                    if "number" in pcopy and "image" in pcopy:
+                        enriched_data.append(pcopy)
+                    else:
+                        enriched_data.append(enrich_pokemon(pcopy))
+
+            # Case 2: dict wrapper (original upload format)
+            elif isinstance(raw_data, dict):
+                # Guard: sometimes metadata files accidentally sit next to uploads; don't treat them as Pokémon payloads.
+                if (
+                    "original_filename" in raw_data
+                    and "legacy_id" in raw_data
+                    and "fileData" not in raw_data
+                ):
+                    return False
+
+                pokemon_data = raw_data.get("fileData", raw_data)
+                if isinstance(pokemon_data, dict):
+                    for pokemon_id, pokemon in pokemon_data.items():
+                        pokemon_copy = (
+                            dict(pokemon) if isinstance(pokemon, dict) else {}
+                        )
+                        pokemon_copy["id"] = pokemon_id
+                        enriched_data.append(enrich_pokemon(pokemon_copy))
+                elif isinstance(pokemon_data, list):
+                    for idx, pokemon in enumerate(pokemon_data):
+                        pokemon_copy = (
+                            dict(pokemon) if isinstance(pokemon, dict) else {}
+                        )
+                        if "id" not in pokemon_copy:
+                            pokemon_copy["id"] = str(idx)
+                        enriched_data.append(enrich_pokemon(pokemon_copy))
+                else:
+                    return False
+            else:
+                return False
+
+            if not enriched_data:
+                return False
+
+            tmp = f"{out_path}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(enriched_data, f, indent=2)
+            os.replace(tmp, out_path)
+
+            # Best-effort: update meta to reflect enrichment.
+            try:
+                fid = os.path.basename(out_path).replace("_enriched.json", "")
+                mp = os.path.join(user_dir, f"{fid}.meta.json")
+                meta = {}
+                if os.path.exists(mp):
+                    with open(mp, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        meta = loaded
+                meta["enriched"] = True
+                meta["total_pokemon"] = int(
+                    meta.get("total_pokemon") or len(enriched_data)
+                )
+                tmpm = f"{mp}.tmp"
+                with open(tmpm, "w", encoding="utf-8") as f:
+                    json.dump(meta, f, indent=2)
+                os.replace(tmpm, mp)
+            except Exception:
+                pass
+
+            return True
+        except Exception:
+            return False
+
     # Look for the enriched file - try multiple patterns
     enriched_path = None
 
+    # Fast path: UUID-based file id
+    if _is_uuid(file_id):
+        p = os.path.join(user_dir, f"{file_id}_enriched.json")
+        if os.path.exists(p):
+            enriched_path = p
+        else:
+            # If the enriched file is missing but raw exists, build it on demand.
+            raw_path = os.path.join(user_dir, f"{file_id}.json")
+            if os.path.exists(raw_path):
+                if _build_enriched_from_raw(raw_path, p):
+                    enriched_path = p
+
     # First, try to find by matching user and date from file_id
-    if " - " in file_id:
+    if (not enriched_path) and " - " in file_id:
         # file_id is in format "User - Date", need to find matching file
         user_part, date_part = file_id.split(" - ", 1)
         for filename in os.listdir(user_dir):
@@ -1898,16 +2279,54 @@ def get_file_data(user_id, file_id):
                 enriched_path = path
                 break
 
+        # If we still don't have an enriched file but a raw JSON exists, build it.
+        if not enriched_path:
+            # Normalize potential raw name.
+            fid_clean = file_id
+            if fid_clean.endswith(".json"):
+                fid_clean = fid_clean[: -len(".json")]
+            raw_candidates = [
+                os.path.join(user_dir, f"{fid_clean}.json"),
+                os.path.join(user_dir, f"{file_id}.json"),
+            ]
+            out_candidate = os.path.join(user_dir, f"{fid_clean}_enriched.json")
+            for raw_path in raw_candidates:
+                if os.path.exists(raw_path):
+                    if _build_enriched_from_raw(raw_path, out_candidate):
+                        enriched_path = out_candidate
+                        file_id = fid_clean
+                    break
+
+    # Legacy compat: if file_id is an old "base name" but the file was migrated to UUID,
+    # try to find a meta file that references it.
+    if (not enriched_path) and (not _is_uuid(file_id)):
+        try:
+            for fn in os.listdir(user_dir):
+                if not fn.endswith(".meta.json"):
+                    continue
+                fid = fn[: -len(".meta.json")]
+                meta = _read_meta(fid)
+                if (meta.get("legacy_id") or "") == file_id:
+                    p = os.path.join(user_dir, f"{fid}_enriched.json")
+                    if os.path.exists(p):
+                        enriched_path = p
+                        file_id = fid
+                        break
+        except Exception:
+            pass
+
     if not enriched_path:
         # List available files for debugging
         available_files = os.listdir(user_dir) if os.path.exists(user_dir) else []
+        sample = sorted(available_files)[:50]
         print(f"[DEBUG] Looking for file_id: {file_id}")
         print(f"[DEBUG] Available files in {user_dir}: {available_files}")
         return jsonify(
             {
                 "error": "Enriched file not found",
                 "file_id": file_id,
-                "available_files": available_files,
+                "available_files_count": len(available_files),
+                "available_files_sample": sample,
             }
         ), 404
 
@@ -2027,10 +2446,15 @@ def get_file_data(user_id, file_id):
 
         if os.path.exists(original_path):
             stat = os.stat(original_path)
-            user, date = extract_metadata_from_filename(f"{file_id}.json")
+            meta = _read_meta(file_id) if _is_uuid(file_id) else {}
+            original_filename = meta.get("original_filename") if meta else None
+            if not original_filename:
+                original_filename = f"{file_id}.json"
+
+            user, date = extract_metadata_from_filename(original_filename)
             file_metadata = {
                 "id": file_id,
-                "filename": f"{file_id}.json",
+                "filename": original_filename,
                 "user": user,
                 "date": date,
                 "upload_date": datetime.fromtimestamp(stat.st_mtime).isoformat(),

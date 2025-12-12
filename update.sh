@@ -4,7 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_URL="https://raw.githubusercontent.com/pvpoke/pvpoke/refs/heads/master/src/data/rankings/all"
 
-mapfile -t RANKING_FILES < <(find "$ROOT_DIR/backend/data" -type f -name 'rankings-*.json' | sort)
+RANKING_FILES=()
+while IFS= read -r f; do
+  RANKING_FILES+=("$f")
+done < <(find "$ROOT_DIR/backend/data" -type f -name 'rankings-*.json' | sort)
 
 if [[ ${#RANKING_FILES[@]} -eq 0 ]]; then
   echo "No rankings files found under backend/data"
