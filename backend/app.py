@@ -2328,6 +2328,42 @@ def apply_search_filter(pokemon_list, search_query):
                 return dyn
             return False
 
+        def _has_special_background(p: dict) -> bool:
+            """True when the Pokémon has a location card background (not the type background)."""
+            if not isinstance(p, dict):
+                return False
+
+            def _check_display(d: dict) -> bool:
+                if not isinstance(d, dict):
+                    return False
+                # Prefer explicit boolean when present.
+                if bool(d.get("hasLocationCard")):
+                    return True
+                lc = d.get("locationCard")
+                if isinstance(lc, dict):
+                    nm = str(lc.get("name") or "").strip()
+                    if nm and "unset" not in nm.lower():
+                        return True
+                # Some exports may surface name directly.
+                nm2 = str(d.get("locationCardName") or "").strip()
+                if nm2 and "unset" not in nm2.lower():
+                    return True
+                return False
+
+            if _check_display(
+                p.get("display") if isinstance(p.get("display"), dict) else {}
+            ):
+                return True
+
+            # Enriched records store original SpeedUnlocker record under "source".
+            src = p.get("source")
+            if isinstance(src, dict):
+                disp2 = src.get("display")
+                if isinstance(disp2, dict) and _check_display(disp2):
+                    return True
+
+            return False
+
         # Special keywords
         if search_query == "apex":
             if pokemon.get("apex"):
@@ -2433,6 +2469,10 @@ def apply_search_filter(pokemon_list, search_query):
             match = _is_gigantamax(pokemon)
         elif search_query == "dynamax":
             match = _is_dynamax_only(pokemon) or _is_gigantamax(pokemon)
+
+        # Special background (location card)
+        elif search_query == "background":
+            match = _has_special_background(pokemon)
 
         # Default: search in name or form
         else:
@@ -2946,6 +2986,36 @@ def get_file_data(user_id, file_id):
                 return pokemon.get("name", "").lower()
             elif order_by == "cp":
                 return pokemon.get("cp", 0)
+            elif order_by == "captured":
+                # SpeedUnlocker capture time is usually source.creationTimeMs (ms since epoch).
+                # Fallback to legacy id if it looks like a timestamp.
+                try:
+                    src = pokemon.get("source")
+                    if isinstance(src, dict):
+                        v = src.get("creationTimeMs")
+                        if v is not None:
+                            return int(v)
+                except Exception:
+                    pass
+
+                # Some records may surface it directly.
+                for k in ("creationTimeMs", "captureTimeMs", "captured_at_ms"):
+                    try:
+                        v = pokemon.get(k)
+                        if v is not None:
+                            return int(v)
+                    except Exception:
+                        continue
+
+                # If our SpeedUnlocker mapping used id=creationTimeMs, use that.
+                try:
+                    pid = str(pokemon.get("id") or "")
+                    if pid.isdigit() and len(pid) >= 12:
+                        return int(pid)
+                except Exception:
+                    pass
+
+                return 0
             elif order_by == "height":
                 return pokemon.get("height", 0)
             elif order_by == "weight":

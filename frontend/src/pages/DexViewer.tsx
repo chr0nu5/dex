@@ -78,6 +78,8 @@ interface ProgressData {
 }
 
 const SORT_OPTIONS = [
+  { value: "captured-desc", label: "Newest" },
+  { value: "captured-asc", label: "Oldest" },
   { value: "number-asc", label: "Number ↑" },
   { value: "number-desc", label: "Number ↓" },
   { value: "name-asc", label: "Name ↑" },
@@ -132,6 +134,58 @@ const getTypeBackgroundUrl = (pokemon: any): string => {
   return `/img/backgrounds/types/details_type_bg_${typeKey}.png`;
 };
 
+const getLocationCardKey = (pokemon: any): string => {
+  const extract = (v: any): string => {
+    const s = String(v || "").trim();
+    if (!s) return "";
+    // Only accept the canonical string form.
+    if (!s.startsWith("LocationCard_")) return "";
+    const lower = s.toLowerCase();
+    // Treat Unset values as "no location card".
+    if (lower === "locationcard_unset") return "";
+    if (lower.includes("unset")) return "";
+    return s;
+  };
+
+  // Prefer the SpeedUnlocker schema: display.locationCard.name
+  const fromDisplay = extract(pokemon?.display?.locationCard?.name);
+  if (fromDisplay) return fromDisplay;
+
+  // Fallback to raw record preserved under source
+  const fromSource = extract(pokemon?.source?.display?.locationCard?.name);
+  if (fromSource) return fromSource;
+
+  // Other possible shapes
+  const fromTopLevelObj = extract(pokemon?.locationCard?.name);
+  if (fromTopLevelObj) return fromTopLevelObj;
+  const fromTopLevel = extract(pokemon?.locationCard);
+  if (fromTopLevel) return fromTopLevel;
+
+  const fromDisplayName = extract(pokemon?.display?.locationCardName);
+  if (fromDisplayName) return fromDisplayName;
+
+  return "";
+};
+
+const getCardBackgroundImage = (pokemon: any): string => {
+  const typeBgUrl = getTypeBackgroundUrl(pokemon);
+  const locationKey = getLocationCardKey(pokemon);
+  if (!locationKey) return `url(${typeBgUrl})`;
+
+  // Some keys in our mapping/files use a slightly different casing for "SpecialBackground".
+  const altKey = locationKey.includes("LcSpecialBackground")
+    ? locationKey.replace("LcSpecialBackground", "LcSpecialbackground")
+    : locationKey.includes("LcSpecialbackground")
+    ? locationKey.replace("LcSpecialbackground", "LcSpecialBackground")
+    : "";
+
+  // Prefer .jpg (matches the downloaded assets); keep type background as final fallback.
+  if (altKey && altKey !== locationKey) {
+    return `url(/img/backgrounds/location/${locationKey}.jpg), url(/img/backgrounds/location/${altKey}.jpg), url(${typeBgUrl})`;
+  }
+  return `url(/img/backgrounds/location/${locationKey}.jpg), url(${typeBgUrl})`;
+};
+
 type PokeballMeta = { url: string; label: string };
 
 const getPokeballMeta = (pokemon: any): PokeballMeta | null => {
@@ -170,8 +224,8 @@ const DexViewer: React.FC = () => {
   const [userFiles, setUserFiles] = useState<UserFile[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [orderBy, setOrderBy] = useState("number");
-  const [orderDir, setOrderDir] = useState("asc");
+  const [orderBy, setOrderBy] = useState("captured");
+  const [orderDir, setOrderDir] = useState("desc");
   const [uniqueOnly, setUniqueOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -646,7 +700,7 @@ const DexViewer: React.FC = () => {
       );
       const typeGradient = getTypeGradient(types);
       const typeBorder = getTypeBorderColor(types);
-      const typeBgUrl = getTypeBackgroundUrl(pokemon);
+      const bgImage = getCardBackgroundImage(pokemon);
 
       return (
         <div
@@ -720,10 +774,10 @@ const DexViewer: React.FC = () => {
                   left: 0,
                   right: 0,
                   height: "55%",
-                  backgroundImage: `url(${typeBgUrl})`,
+                  backgroundImage: bgImage,
                   backgroundSize: "cover",
                   backgroundPosition: "top center",
-                  opacity: 0.9,
+                  opacity: 1,
                   pointerEvents: "none",
                   zIndex: 0,
                   WebkitMaskImage:
@@ -742,7 +796,7 @@ const DexViewer: React.FC = () => {
                   right: 0,
                   bottom: 0,
                   background:
-                    "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 100%)",
                   pointerEvents: "none",
                   zIndex: 1,
                 }}
@@ -1337,7 +1391,7 @@ const DexViewer: React.FC = () => {
       );
       const typeGradient = getTypeGradient(types);
       const typeBorder = getTypeBorderColor(types);
-      const typeBgUrl = getTypeBackgroundUrl(pokemon);
+      const bgImage = getCardBackgroundImage(pokemon);
 
       return (
         <div
@@ -1412,10 +1466,10 @@ const DexViewer: React.FC = () => {
                   left: 0,
                   right: 0,
                   height: "55%",
-                  backgroundImage: `url(${typeBgUrl})`,
+                  backgroundImage: bgImage,
                   backgroundSize: "cover",
                   backgroundPosition: "top center",
-                  opacity: 0.9,
+                  opacity: 1,
                   pointerEvents: "none",
                   zIndex: 0,
                   WebkitMaskImage:
@@ -1433,7 +1487,7 @@ const DexViewer: React.FC = () => {
                   right: 0,
                   bottom: 0,
                   background:
-                    "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 100%)",
                   pointerEvents: "none",
                   zIndex: 1,
                 }}
