@@ -346,6 +346,369 @@ select.liquid-glass-select option {
     0 0 40px rgba(255, 215, 0, 0.5),
     inset 0 1px 0 rgba(255, 215, 0, 0.3);
 }
+.pokemon-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  z-index: 9999;
+}
+.pokemon-detail-anim {
+  position: fixed;
+  transform-origin: top left;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.pokemon-detail-scene {
+  perspective: 1400px;
+}
+.pokemon-detail-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pokemon-detail-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+.pokemon-detail-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+.pokemon-detail-front {
+  opacity: 1;
+  transition: opacity 120ms linear;
+}
+.pokemon-detail-inner.is-flipped .pokemon-detail-front {
+  opacity: 0;
+}
+.pokemon-detail-back {
+  transform: rotateY(180deg);
+  background: transparent;
+}
+
+.pokemon-detail-blank-wrap {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.pokemon-detail-blank-card {
+  width: 100%;
+  height: 100%;
+  background: #000000;
+  border-radius: 10px;
+  border: none;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Background image layer + vertical opacity mask (100% at top -> stays 100% -> fades to 0 at the image/footer). */
+.pokemon-detail-blank-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Constrain the background region so the fade applies to the background area, not the entire card content. */
+  height: 288px;
+  background-image: var(--detail-bg-image);
+  background-position: top center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+}
+
+.pokemon-detail-cp-wrap {
+  position: absolute;
+  top: 30px;
+  left: 0px;
+  right: 0px;
+  aspect-ratio: 2 / 1;
+  height: auto;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pokemon-detail-cp-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.pokemon-detail-cp-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.pokemon-detail-cp-progress {
+  fill: none;
+  stroke: rgba(255, 255, 255, 1);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.pokemon-detail-cp-knob {
+  fill: #ffffff;
+  stroke: rgba(255, 255, 255, 0.6);
+  stroke-width: 1;
+}
+
+.pokemon-detail-cp-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -20px;
+  display: flex;
+  justify-content: center;
+  align-items: end;
+  gap: 0px;
+  color: #ffffff;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.pokemon-detail-cp-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.95;
+  font-weight: 400;
+  display: inline-block;
+}
+
+.pokemon-detail-cp-value {
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.pokemon-detail-back-panel {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  background: #ffffff;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  overflow: visible;
+}
+
+.pokemon-detail-back-pokemon-block {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 200px;
+  transform: translate(-50%, -70%);
+  pointer-events: none;
+  z-index: 2;
+  text-align: center;
+}
+
+.pokemon-detail-back-pokemon-block.is-gigantamax {
+  overflow: visble;
+}
+
+.pokemon-detail-back-pokemon {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.pokemon-detail-back-name {
+  margin-top: 6px;
+  color: #3a3a3a;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 0.4;
+}
+
+.pokemon-detail-back-stamina {
+  width: 144px;
+  margin: 10px auto 0;
+}
+
+.pokemon-detail-back-lucky {
+  text-align: center;
+  color: #53d769;
+  font-weight: 600;
+  font-size: 8px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.pokemon-detail-back-stamina-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(74, 124, 77, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pokemon-detail-back-stamina-fill {
+  height: 100%;
+  background: #53d769;
+  border-radius: 999px;
+}
+
+.pokemon-detail-back-gender {
+  position: absolute;
+  right: 24px;
+  transform: translateY(-50%);
+  z-index: 3;
+  pointer-events: none;
+  color: #b5b5b5;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  /* Thicken the glyph without changing layout/position (solid, no opacity). */
+  text-shadow:
+    0.3px 0 0 currentColor,
+    -0.3px 0 0 currentColor,
+    0 0.3px 0 currentColor,
+    0 -0.3px 0 currentColor,
+    0.3px 0.3px 0 currentColor,
+    -0.3px 0.3px 0 currentColor,
+    0.3px -0.3px 0 currentColor,
+    -0.3px -0.3px 0 currentColor;
+}
+
+.pokemon-detail-back-info-row {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: uppercase;
+  padding-bottom: 16px;
+  border-bottom: 0.5px solid #e6e6e6;
+}
+
+.pokemon-detail-back-info-block {
+  flex: 1;
+  text-align: center;
+}
+
+.pokemon-detail-back-info-value {
+  color: #3a3a3a;
+  font-weight: 600;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.pokemon-detail-back-info-label {
+  margin-top: 2px;
+  color: #b5b5b5;
+  font-weight: 600;
+  font-size: 7px;
+  line-height: 1;
+}
+
+.pokemon-detail-back-info-sep {
+  width: 0.5px;
+  height: 17px;
+  background: #e6e6e6;
+}
+
+.pokemon-detail-back-types {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.pokemon-detail-back-type-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.pokemon-detail-back-max-row {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-transform: uppercase;
+  color: #b5b5b5;
+  font-weight: 600;
+  font-size: 8px;
+  line-height: 1;
+  padding-bottom: 8px;
+  margin-top: -8px;
+  border-bottom: 0.5px solid #e6e6e6;
+}
+
+.pokemon-detail-back-max-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.pokemon-detail-back-max-text {
+  color: #3a3a3a;
+  font-weight: bold;
+}
+
+.pokemon-detail-back-stamina-text {
+  margin-top: 6px;
+  transform: translateY(-4px);
+  font-size: 6px;
+  color: #3a3a3a;
+  font-weight: 500;
+}
+
+/* Inside the details overlay, keep the card static (no hover lift). */
+.pokemon-detail-overlay .pokemon-card {
+  cursor: default;
+}
+
+.pokemon-detail-overlay .pokemon-card:hover {
+  transform: none;
+  border-color: inherit;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  z-index: auto;
+}
+
+.pokemon-detail-overlay .pokemon-card-wrapper:hover .pokeball-overlay {
+  transform: none;
+}
 
 /* Shadow Card - Purple Dark Theme */
 .pokemon-card.shadow-card {

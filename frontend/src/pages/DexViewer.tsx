@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -104,6 +105,49 @@ const CARD_WIDTH = 240;
 const CARD_HEIGHT = 380;
 const GAP = 48;
 
+const DETAILS_SQUARE_PX = CARD_WIDTH + GAP;
+const DETAILS_PANEL_TOP_PX = Math.round((DETAILS_SQUARE_PX * 2) / 3);
+
+// CP formula helpers (Pokemon GO). We use Level 50 max CPM.
+const MAX_CPM_L50 = 0.84029999;
+
+const calcMaxCp = (pokemon: any): number | null => {
+  const baseAtk = Number(pokemon?.base_attack ?? pokemon?.base_atk);
+  const baseDef = Number(pokemon?.base_defence ?? pokemon?.base_defense);
+  const baseSta = Number(pokemon?.base_stamina);
+
+  if (![baseAtk, baseDef, baseSta].every((n) => Number.isFinite(n)))
+    return null;
+
+  const iva = 15;
+  const ivd = 15;
+  const ivs = 15;
+  const cpm = MAX_CPM_L50;
+
+  const raw =
+    ((baseAtk + iva) *
+      Math.sqrt(baseDef + ivd) *
+      Math.sqrt(baseSta + ivs) *
+      cpm *
+      cpm) /
+    10;
+
+  const cp = Math.floor(raw);
+  return Number.isFinite(cp) && cp > 0 ? cp : null;
+};
+
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+
+const toTitleCaseName = (raw: any): string => {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  return s
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ");
+};
+
 const TYPE_BG_ALLOWED = new Set([
   "bug",
   "dark",
@@ -186,6 +230,24 @@ const getCardBackgroundImage = (pokemon: any): string => {
   return `url(/img/backgrounds/location/${locationKey}.jpg), url(${typeBgUrl})`;
 };
 
+const getIvGradientColor = (ivRaw: any): string => {
+  const iv = Number(ivRaw);
+  if (!Number.isFinite(iv)) return "#FFFFFF";
+
+  const t = Math.max(0, Math.min(1, iv / 15));
+
+  // NOTE: You asked for "vermelho #FFF" -> green; #FFF is white, so we assume
+  // a red-to-green gradient using the existing red token as the start.
+  const start = { r: 255, g: 77, b: 79 }; // #ff4d4f
+  const end = { r: 74, g: 124, b: 77 }; // rgb(74, 124, 77)
+
+  const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return `rgb(${lerp(start.r, end.r)}, ${lerp(start.g, end.g)}, ${lerp(
+    start.b,
+    end.b
+  )})`;
+};
+
 type PokeballMeta = { url: string; label: string };
 
 const getPokeballMeta = (pokemon: any): PokeballMeta | null => {
@@ -240,6 +302,213 @@ const DexViewer: React.FC = () => {
   const [pvpEnabled, setPvpEnabled] = useState(false);
   const [pvpLeague, setPvpLeague] = useState<"GL" | "UL" | "ML">("GL");
   const [pvpCategory, setPvpCategory] = useState("overall");
+
+  type PokemonDetailsState = {
+    pokemon: any;
+    origin: { top: number; left: number; width: number; height: number };
+    phase: "opening" | "open" | "closing";
+    transform: string;
+    flipped: boolean;
+  };
+
+  const computeDetailsTransform = useCallback(
+    (origin: { top: number; left: number; width: number; height: number }) => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const baseWidth = CARD_WIDTH + GAP;
+      const baseHeight = CARD_HEIGHT + GAP;
+      const ratio = baseWidth / baseHeight;
+
+      // Keep some padding from the screen edges when expanded.
+      // Use a larger vertical pad so the expanded card doesn't stick to 100% height.
+      const viewportPadX = 24;
+      const viewportPadY = 56;
+      const availW = Math.max(0, vw - viewportPadX * 2);
+      const availH = Math.max(0, vh - viewportPadY * 2);
+
+      // Maximize within the padded viewport, preserving card aspect ratio.
+      const targetHeight = Math.min(availH, availW / ratio);
+      const targetWidth = targetHeight * ratio;
+
+      const targetLeft = (vw - targetWidth) / 2;
+      // Keep the expanded card aligned to the top padding.
+      const targetTop = viewportPadY;
+
+      const scaleX = targetWidth / origin.width;
+      const scaleY = targetHeight / origin.height;
+      const scale = Math.min(scaleX, scaleY);
+
+      const dx = targetLeft - origin.left;
+      const dy = targetTop - origin.top;
+
+      return {
+        transform: `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`,
+      };
+    },
+    []
+  );
+
+  const [pokemonDetails, setPokemonDetails] =
+    useState<PokemonDetailsState | null>(null);
+
+  const detailBackCardRef = useRef<HTMLDivElement | null>(null);
+  const detailHpTrackRef = useRef<HTMLDivElement | null>(null);
+  const detailStaminaWrapRef = useRef<HTMLDivElement | null>(null);
+  const detailInfoRowRef = useRef<HTMLDivElement | null>(null);
+  const detailMaxRowRef = useRef<HTMLDivElement | null>(null);
+  const [detailHpTrackCenterY, setDetailHpTrackCenterY] = useState<
+    number | null
+  >(null);
+  const [detailAfterHpTop, setDetailAfterHpTop] = useState<number | null>(null);
+  const [detailAfterInfoTop, setDetailAfterInfoTop] = useState<number | null>(
+    null
+  );
+  const detailAfterMaxTopRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!pokemonDetails) {
+      setDetailHpTrackCenterY(null);
+      setDetailAfterHpTop(null);
+      setDetailAfterInfoTop(null);
+      detailAfterMaxTopRef.current = null;
+      return;
+    }
+
+    const compute = () => {
+      const cardEl = detailBackCardRef.current;
+      const trackEl =
+        detailHpTrackRef.current ||
+        (cardEl?.querySelector(
+          ".pokemon-detail-back-stamina-track"
+        ) as HTMLElement | null);
+      const staminaEl =
+        detailStaminaWrapRef.current ||
+        (cardEl?.querySelector(
+          ".pokemon-detail-back-stamina"
+        ) as HTMLElement | null);
+      const infoRowEl = detailInfoRowRef.current;
+      if (!cardEl) return;
+
+      const cardRect = cardEl.getBoundingClientRect();
+
+      let trackRect: DOMRect | null = null;
+      if (trackEl) {
+        trackRect = trackEl.getBoundingClientRect();
+        const centerY =
+          trackRect.top + trackRect.height / 2 - (cardRect.top || 0);
+        if (Number.isFinite(centerY)) setDetailHpTrackCenterY(centerY);
+      }
+
+      if (staminaEl) {
+        const staminaRect = staminaEl.getBoundingClientRect();
+        const bottomY = staminaRect.bottom - (cardRect.top || 0);
+        if (Number.isFinite(bottomY)) setDetailAfterHpTop(bottomY + 10);
+      } else if (trackRect) {
+        const bottomY = trackRect.bottom - (cardRect.top || 0);
+        if (Number.isFinite(bottomY)) setDetailAfterHpTop(bottomY + 10);
+      }
+
+      if (infoRowEl) {
+        const infoRect = infoRowEl.getBoundingClientRect();
+        const bottomY = infoRect.bottom - (cardRect.top || 0);
+        if (Number.isFinite(bottomY)) {
+          const nextTop = bottomY + 16;
+          setDetailAfterInfoTop((prev) => (prev === nextTop ? prev : nextTop));
+        }
+      } else {
+        setDetailAfterInfoTop(null);
+      }
+
+      const maxRowEl = detailMaxRowRef.current;
+      if (maxRowEl) {
+        const maxRect = maxRowEl.getBoundingClientRect();
+        const bottomY = maxRect.bottom - (cardRect.top || 0);
+        if (Number.isFinite(bottomY))
+          detailAfterMaxTopRef.current = bottomY + 16;
+      }
+    };
+
+    const raf = requestAnimationFrame(compute);
+    compute();
+    window.addEventListener("resize", compute);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", compute);
+    };
+  }, [pokemonDetails]);
+
+  const openPokemonDetails = useCallback(
+    (pokemon: any, originEl: HTMLElement) => {
+      const r = originEl.getBoundingClientRect();
+      const origin = {
+        top: r.top,
+        left: r.left,
+        width: r.width,
+        height: r.height,
+      };
+
+      setPokemonDetails({
+        pokemon,
+        origin,
+        phase: "opening",
+        transform: "translate3d(0px, 0px, 0) scale(1)",
+        flipped: false,
+      });
+    },
+    []
+  );
+
+  const closePokemonDetails = useCallback(() => {
+    setPokemonDetails((s) =>
+      s
+        ? {
+            ...s,
+            phase: "closing",
+            transform: "translate3d(0px, 0px, 0) scale(1)",
+            flipped: false,
+          }
+        : s
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!pokemonDetails) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [pokemonDetails]);
+
+  useEffect(() => {
+    if (!pokemonDetails || pokemonDetails.phase !== "opening") return;
+
+    const id = requestAnimationFrame(() => {
+      setPokemonDetails((s) => {
+        if (!s || s.phase !== "opening") return s;
+        const { transform } = computeDetailsTransform(s.origin);
+        return { ...s, phase: "open", transform, flipped: true };
+      });
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [pokemonDetails, computeDetailsTransform]);
+
+  useEffect(() => {
+    if (!pokemonDetails || pokemonDetails.phase === "closing") return;
+
+    const onResize = () => {
+      setPokemonDetails((s) => {
+        if (!s || s.phase === "closing") return s;
+        const { transform } = computeDetailsTransform(s.origin);
+        return { ...s, transform };
+      });
+    };
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [pokemonDetails, computeDetailsTransform]);
   const [pvpCategories, setPvpCategories] = useState<string[]>(["overall"]);
   const [bestTeamsEnabled, setBestTeamsEnabled] = useState(false);
   const [containerDimensions, setContainerDimensions] = useState({
@@ -709,6 +978,9 @@ const DexViewer: React.FC = () => {
             padding: `${GAP / 2}px`,
             boxSizing: "border-box",
           }}
+          onClick={(e) =>
+            openPokemonDetails(pokemon, e.currentTarget as HTMLElement)
+          }
         >
           <div
             className="pokemon-card-wrapper"
@@ -773,17 +1045,18 @@ const DexViewer: React.FC = () => {
                   top: 0,
                   left: 0,
                   right: 0,
-                  height: "55%",
+                  height: "65%",
                   backgroundImage: bgImage,
                   backgroundSize: "cover",
                   backgroundPosition: "top center",
                   opacity: 1,
+                  filter: "brightness(1.1) saturate(1.12)",
                   pointerEvents: "none",
                   zIndex: 0,
                   WebkitMaskImage:
-                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
                   maskImage:
-                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
                 }}
               />
 
@@ -796,7 +1069,7 @@ const DexViewer: React.FC = () => {
                   right: 0,
                   bottom: 0,
                   background:
-                    "linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.20) 100%)",
                   pointerEvents: "none",
                   zIndex: 1,
                 }}
@@ -918,7 +1191,11 @@ const DexViewer: React.FC = () => {
                           <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
                         </>
                       ) : (
-                        pokemon.attack
+                        <span
+                          style={{ color: getIvGradientColor(pokemon.attack) }}
+                        >
+                          {pokemon.attack}
+                        </span>
                       )}
                     </span>
                   </div>,
@@ -957,7 +1234,11 @@ const DexViewer: React.FC = () => {
                           <span style={{ color: "#52c41a" }}>{pvpDef}</span>
                         </>
                       ) : (
-                        pokemon.defence
+                        <span
+                          style={{ color: getIvGradientColor(pokemon.defence) }}
+                        >
+                          {pokemon.defence}
+                        </span>
                       )}
                     </span>
                   </div>,
@@ -996,7 +1277,11 @@ const DexViewer: React.FC = () => {
                           <span style={{ color: "#52c41a" }}>{pvpStm}</span>
                         </>
                       ) : (
-                        pokemon.stamina
+                        <span
+                          style={{ color: getIvGradientColor(pokemon.stamina) }}
+                        >
+                          {pokemon.stamina}
+                        </span>
                       )}
                     </span>
                   </div>,
@@ -1350,7 +1635,8 @@ const DexViewer: React.FC = () => {
   );
 
   const renderPokemonCardStandalone = useCallback(
-    (pokemon: any) => {
+    (pokemon: any, opts?: { enableDetailsClick?: boolean }) => {
+      const enableDetailsClick = opts?.enableDetailsClick !== false;
       const isShiny = pokemon.shiny || false;
       const isShadow = pokemon.shadow || false;
       const isLucky = pokemon.lucky || false;
@@ -1401,6 +1687,12 @@ const DexViewer: React.FC = () => {
             padding: `${GAP / 2}px`,
             boxSizing: "border-box",
           }}
+          onClick={
+            enableDetailsClick
+              ? (e) =>
+                  openPokemonDetails(pokemon, e.currentTarget as HTMLElement)
+              : undefined
+          }
         >
           <div
             className="pokemon-card-wrapper"
@@ -1465,17 +1757,18 @@ const DexViewer: React.FC = () => {
                   top: 0,
                   left: 0,
                   right: 0,
-                  height: "55%",
+                  height: "65%",
                   backgroundImage: bgImage,
                   backgroundSize: "cover",
                   backgroundPosition: "top center",
                   opacity: 1,
+                  filter: "brightness(1.1) saturate(1.12)",
                   pointerEvents: "none",
                   zIndex: 0,
                   WebkitMaskImage:
-                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
                   maskImage:
-                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
                 }}
               />
 
@@ -1487,7 +1780,7 @@ const DexViewer: React.FC = () => {
                   right: 0,
                   bottom: 0,
                   background:
-                    "linear-gradient(to bottom, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.28) 100%)",
+                    "linear-gradient(to bottom, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.20) 100%)",
                   pointerEvents: "none",
                   zIndex: 1,
                 }}
@@ -1605,7 +1898,11 @@ const DexViewer: React.FC = () => {
                           <span style={{ color: "#52c41a" }}>{pvpAtk}</span>
                         </>
                       ) : (
-                        pokemon.attack
+                        <span
+                          style={{ color: getIvGradientColor(pokemon.attack) }}
+                        >
+                          {pokemon.attack}
+                        </span>
                       )}
                     </span>
                   </div>,
@@ -1643,7 +1940,11 @@ const DexViewer: React.FC = () => {
                           <span style={{ color: "#52c41a" }}>{pvpDef}</span>
                         </>
                       ) : (
-                        pokemon.defence
+                        <span
+                          style={{ color: getIvGradientColor(pokemon.defence) }}
+                        >
+                          {pokemon.defence}
+                        </span>
                       )}
                     </span>
                   </div>,
@@ -1681,7 +1982,11 @@ const DexViewer: React.FC = () => {
                           <span style={{ color: "#52c41a" }}>{pvpStm}</span>
                         </>
                       ) : (
-                        pokemon.stamina
+                        <span
+                          style={{ color: getIvGradientColor(pokemon.stamina) }}
+                        >
+                          {pokemon.stamina}
+                        </span>
                       )}
                     </span>
                   </div>,
@@ -2027,7 +2332,7 @@ const DexViewer: React.FC = () => {
         </div>
       );
     },
-    [speciesTallestByDex]
+    [openPokemonDetails, speciesTallestByDex]
   );
 
   const renderTeamSummaryCards = useCallback((team: any) => {
@@ -2185,9 +2490,348 @@ const DexViewer: React.FC = () => {
       </>
     );
   }, []);
-
   return (
     <div style={{ minHeight: "100vh", paddingTop: "80px" }}>
+      {pokemonDetails && (
+        <div
+          className="pokemon-detail-overlay"
+          onClick={closePokemonDetails}
+          role="presentation"
+        >
+          <div
+            className="pokemon-detail-anim"
+            style={{
+              top: pokemonDetails.origin.top,
+              left: pokemonDetails.origin.left,
+              transform: pokemonDetails.transform,
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onTransitionEnd={(e) => {
+              if (e.propertyName !== "transform") return;
+              setPokemonDetails((s) => (s?.phase === "closing" ? null : s));
+            }}
+          >
+            <div
+              className="pokemon-detail-scene"
+              style={{
+                width: CARD_WIDTH + GAP,
+                height: CARD_HEIGHT + GAP,
+              }}
+            >
+              <div
+                className={
+                  pokemonDetails.flipped
+                    ? "pokemon-detail-inner is-flipped"
+                    : "pokemon-detail-inner"
+                }
+              >
+                <div className="pokemon-detail-face pokemon-detail-front">
+                  {renderPokemonCardStandalone(pokemonDetails.pokemon, {
+                    enableDetailsClick: false,
+                  })}
+                </div>
+
+                <div className="pokemon-detail-face pokemon-detail-back">
+                  {/* Blank card back (empty, ready for future details UI) */}
+                  <div className="pokemon-detail-blank-wrap">
+                    <div
+                      className="pokemon-detail-blank-card"
+                      ref={detailBackCardRef}
+                      style={{
+                        ["--detail-bg-image" as any]: getCardBackgroundImage(
+                          pokemonDetails.pokemon
+                        ),
+                      }}
+                    >
+                      {(() => {
+                        const symbol = pokemonDetails.pokemon?.gender_symbol;
+                        if (!symbol || symbol === "⚲") return null;
+                        if (!Number.isFinite(detailHpTrackCenterY as any))
+                          return null;
+
+                        return (
+                          <div
+                            className="pokemon-detail-back-gender"
+                            style={{
+                              top: detailHpTrackCenterY ?? undefined,
+                            }}
+                          >
+                            {symbol}
+                          </div>
+                        );
+                      })()}
+
+                      {(() => {
+                        if (!Number.isFinite(detailAfterHpTop as any))
+                          return null;
+
+                        const rawWeight = Number(
+                          pokemonDetails.pokemon?.weight_kg ??
+                            pokemonDetails.pokemon?.weightKg ??
+                            pokemonDetails.pokemon?.weight
+                        );
+                        const rawHeight = Number(
+                          pokemonDetails.pokemon?.height_m ??
+                            pokemonDetails.pokemon?.heightM ??
+                            pokemonDetails.pokemon?.height
+                        );
+
+                        const formatValue = (v: number, unit: string) => {
+                          if (!Number.isFinite(v)) return "—";
+                          const fixed = Math.abs(v - Math.round(v)) < 1e-6;
+                          const s = fixed
+                            ? String(Math.round(v))
+                            : v.toFixed(1);
+                          return `${s}${unit}`;
+                        };
+
+                        const typesRaw: any[] = Array.isArray(
+                          pokemonDetails.pokemon?.types
+                        )
+                          ? pokemonDetails.pokemon.types
+                          : [];
+                        const types = Array.from(
+                          new Set(
+                            typesRaw
+                              .map((t) => String(t || "").trim())
+                              .filter(Boolean)
+                              .map((t) => t.toUpperCase())
+                          )
+                        );
+
+                        return (
+                          <div
+                            className="pokemon-detail-back-info-row"
+                            style={{ top: detailAfterHpTop ?? undefined }}
+                            ref={detailInfoRowRef}
+                          >
+                            <div className="pokemon-detail-back-info-block">
+                              <div className="pokemon-detail-back-info-value">
+                                {formatValue(rawWeight, "KG")}
+                              </div>
+                              <div className="pokemon-detail-back-info-label">
+                                Weight
+                              </div>
+                            </div>
+
+                            <div className="pokemon-detail-back-info-sep" />
+
+                            <div className="pokemon-detail-back-info-block">
+                              <div className="pokemon-detail-back-types">
+                                {types.map((t) => (
+                                  <img
+                                    key={t}
+                                    className="pokemon-detail-back-type-icon"
+                                    src={`/img/types/POKEMON_TYPE_${t}.png`}
+                                    alt={t}
+                                  />
+                                ))}
+                              </div>
+                              <div className="pokemon-detail-back-info-label">
+                                {types.length ? types.join(" / ") : "—"}
+                              </div>
+                            </div>
+
+                            <div className="pokemon-detail-back-info-sep" />
+
+                            <div className="pokemon-detail-back-info-block">
+                              <div className="pokemon-detail-back-info-value">
+                                {formatValue(rawHeight, "M")}
+                              </div>
+                              <div className="pokemon-detail-back-info-label">
+                                Height
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {(() => {
+                        if (!Number.isFinite(detailAfterInfoTop as any))
+                          return null;
+
+                        const isDynamax = Boolean(
+                          pokemonDetails.pokemon?.dynamax
+                        );
+                        const isGigantamax = Boolean(
+                          pokemonDetails.pokemon?.gigantamax
+                        );
+                        if (!isDynamax && !isGigantamax) return null;
+
+                        const parts: string[] = [];
+                        if (isGigantamax) parts.push("Gigantamax");
+                        else if (isDynamax) parts.push("Dynamax");
+
+                        return (
+                          <div
+                            className="pokemon-detail-back-max-row"
+                            style={{ top: detailAfterInfoTop ?? undefined }}
+                            ref={detailMaxRowRef}
+                          >
+                            <img
+                              className="pokemon-detail-back-max-icon"
+                              src="/img/icons/dynamax.png"
+                              alt="dynamax"
+                            />
+                            <div className="pokemon-detail-back-max-text">
+                              {parts.join(" / ")}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {(() => {
+                        const cp = Number(pokemonDetails.pokemon?.cp);
+                        const maxCp = calcMaxCp(pokemonDetails.pokemon);
+                        const ratio =
+                          Number.isFinite(cp) && maxCp
+                            ? clamp01(cp / maxCp)
+                            : 0;
+
+                        // Perfect semicircle: diameter spans the available width.
+                        const r = 50;
+                        const d = "M 0 50 A 50 50 0 0 1 100 50";
+                        const circumference = Math.PI * r;
+                        const dash = circumference * ratio;
+
+                        const cx = 50;
+                        const cy = 50;
+                        // ratio: 0 (left) -> 1 (right)
+                        const angle = Math.PI * (1 - ratio);
+                        const knobX = cx + r * Math.cos(angle);
+                        const knobY = cy - r * Math.sin(angle);
+
+                        return (
+                          <div className="pokemon-detail-cp-wrap">
+                            <svg
+                              className="pokemon-detail-cp-svg"
+                              viewBox="-6 -6 112 62"
+                              preserveAspectRatio="xMidYMid meet"
+                              aria-label="CP progress"
+                            >
+                              <path
+                                d={d}
+                                className="pokemon-detail-cp-track"
+                                pathLength={circumference}
+                              />
+                              <path
+                                d={d}
+                                className="pokemon-detail-cp-progress"
+                                pathLength={circumference}
+                                style={{
+                                  strokeDasharray: `${dash} ${circumference}`,
+                                }}
+                              />
+                              <circle
+                                className="pokemon-detail-cp-knob"
+                                cx={knobX}
+                                cy={knobY}
+                                r={1.5}
+                              />
+                            </svg>
+                            <div className="pokemon-detail-cp-text">
+                              <span className="pokemon-detail-cp-label">
+                                CP
+                              </span>
+                              <span className="pokemon-detail-cp-value">
+                                {Number.isFinite(cp) ? cp : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      <div
+                        className="pokemon-detail-back-panel"
+                        style={{ top: DETAILS_PANEL_TOP_PX }}
+                      >
+                        <div
+                          className={
+                            pokemonDetails.pokemon?.gigantamax
+                              ? "pokemon-detail-back-pokemon-block is-gigantamax"
+                              : "pokemon-detail-back-pokemon-block"
+                          }
+                        >
+                          <img
+                            className="pokemon-detail-back-pokemon"
+                            src={
+                              pokemonDetails.pokemon?.image
+                                ? `/${pokemonDetails.pokemon.image}`
+                                : "/img/placeholder.png"
+                            }
+                            alt={pokemonDetails.pokemon?.name || "pokemon"}
+                          />
+                          <div className="pokemon-detail-back-name">
+                            {toTitleCaseName(pokemonDetails.pokemon?.name)}
+                          </div>
+
+                          {(() => {
+                            const current = Number(
+                              pokemonDetails.pokemon?.hp_current ??
+                                pokemonDetails.pokemon?.hpCurrent ??
+                                pokemonDetails.pokemon?.stamina_current ??
+                                pokemonDetails.pokemon?.staminaCurrent
+                            );
+                            const max = Number(
+                              pokemonDetails.pokemon?.hp_max ??
+                                pokemonDetails.pokemon?.hpMax ??
+                                pokemonDetails.pokemon?.stamina_max ??
+                                pokemonDetails.pokemon?.staminaMax
+                            );
+
+                            const ratio =
+                              Number.isFinite(current) &&
+                              Number.isFinite(max) &&
+                              max > 0
+                                ? clamp01(current / max)
+                                : 0;
+
+                            return (
+                              <div
+                                className="pokemon-detail-back-stamina"
+                                ref={detailStaminaWrapRef}
+                                title={
+                                  Number.isFinite(current) &&
+                                  Number.isFinite(max) &&
+                                  max > 0
+                                    ? `Stamina ${current}/${max}`
+                                    : "Stamina"
+                                }
+                              >
+                                {pokemonDetails.pokemon?.lucky ? (
+                                  <div className="pokemon-detail-back-lucky">
+                                    LUCKY POKÉMON
+                                  </div>
+                                ) : null}
+                                <div
+                                  className="pokemon-detail-back-stamina-track"
+                                  ref={detailHpTrackRef}
+                                >
+                                  <div
+                                    className="pokemon-detail-back-stamina-fill"
+                                    style={{ width: `${ratio * 100}%` }}
+                                  />
+                                </div>
+                                {Number.isFinite(current) &&
+                                Number.isFinite(max) &&
+                                max > 0 ? (
+                                  <div className="pokemon-detail-back-stamina-text">
+                                    {current}/{max} HP
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="liquid-glass-header">
         {/** When no JSON is selected (/dex), keep controls disabled (except Home + JSON picker). */}
         <Button
