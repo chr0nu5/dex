@@ -1,7 +1,6 @@
 import React, {
   useState,
   useEffect,
-  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
@@ -353,90 +352,6 @@ const DexViewer: React.FC = () => {
     useState<PokemonDetailsState | null>(null);
 
   const detailBackCardRef = useRef<HTMLDivElement | null>(null);
-  const detailHpTrackRef = useRef<HTMLDivElement | null>(null);
-  const detailStaminaWrapRef = useRef<HTMLDivElement | null>(null);
-  const detailInfoRowRef = useRef<HTMLDivElement | null>(null);
-  const detailMaxRowRef = useRef<HTMLDivElement | null>(null);
-  const [detailHpTrackCenterY, setDetailHpTrackCenterY] = useState<
-    number | null
-  >(null);
-  const [detailAfterHpTop, setDetailAfterHpTop] = useState<number | null>(null);
-  const [detailAfterInfoTop, setDetailAfterInfoTop] = useState<number | null>(
-    null
-  );
-  const detailAfterMaxTopRef = useRef<number | null>(null);
-
-  useLayoutEffect(() => {
-    if (!pokemonDetails) {
-      setDetailHpTrackCenterY(null);
-      setDetailAfterHpTop(null);
-      setDetailAfterInfoTop(null);
-      detailAfterMaxTopRef.current = null;
-      return;
-    }
-
-    const compute = () => {
-      const cardEl = detailBackCardRef.current;
-      const trackEl =
-        detailHpTrackRef.current ||
-        (cardEl?.querySelector(
-          ".pokemon-detail-back-stamina-track"
-        ) as HTMLElement | null);
-      const staminaEl =
-        detailStaminaWrapRef.current ||
-        (cardEl?.querySelector(
-          ".pokemon-detail-back-stamina"
-        ) as HTMLElement | null);
-      const infoRowEl = detailInfoRowRef.current;
-      if (!cardEl) return;
-
-      const cardRect = cardEl.getBoundingClientRect();
-
-      let trackRect: DOMRect | null = null;
-      if (trackEl) {
-        trackRect = trackEl.getBoundingClientRect();
-        const centerY =
-          trackRect.top + trackRect.height / 2 - (cardRect.top || 0);
-        if (Number.isFinite(centerY)) setDetailHpTrackCenterY(centerY);
-      }
-
-      if (staminaEl) {
-        const staminaRect = staminaEl.getBoundingClientRect();
-        const bottomY = staminaRect.bottom - (cardRect.top || 0);
-        if (Number.isFinite(bottomY)) setDetailAfterHpTop(bottomY + 10);
-      } else if (trackRect) {
-        const bottomY = trackRect.bottom - (cardRect.top || 0);
-        if (Number.isFinite(bottomY)) setDetailAfterHpTop(bottomY + 10);
-      }
-
-      if (infoRowEl) {
-        const infoRect = infoRowEl.getBoundingClientRect();
-        const bottomY = infoRect.bottom - (cardRect.top || 0);
-        if (Number.isFinite(bottomY)) {
-          const nextTop = bottomY + 16;
-          setDetailAfterInfoTop((prev) => (prev === nextTop ? prev : nextTop));
-        }
-      } else {
-        setDetailAfterInfoTop(null);
-      }
-
-      const maxRowEl = detailMaxRowRef.current;
-      if (maxRowEl) {
-        const maxRect = maxRowEl.getBoundingClientRect();
-        const bottomY = maxRect.bottom - (cardRect.top || 0);
-        if (Number.isFinite(bottomY))
-          detailAfterMaxTopRef.current = bottomY + 16;
-      }
-    };
-
-    const raf = requestAnimationFrame(compute);
-    compute();
-    window.addEventListener("resize", compute);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", compute);
-    };
-  }, [pokemonDetails]);
 
   const openPokemonDetails = useCallback(
     (pokemon: any, originEl: HTMLElement) => {
@@ -509,6 +424,7 @@ const DexViewer: React.FC = () => {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [pokemonDetails, computeDetailsTransform]);
+
   const [pvpCategories, setPvpCategories] = useState<string[]>(["overall"]);
   const [bestTeamsEnabled, setBestTeamsEnabled] = useState(false);
   const [containerDimensions, setContainerDimensions] = useState({
@@ -549,31 +465,13 @@ const DexViewer: React.FC = () => {
       }
     };
 
-    // Set initial dimensions
     handleResize();
-
-    // Add resize listener
     window.addEventListener("resize", handleResize);
 
     return () => {
       window.removeEventListener("resize", handleResize);
     };
   }, []);
-
-  useEffect(() => {
-    loadFileData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    fileId,
-    debouncedSearch,
-    orderBy,
-    orderDir,
-    uniqueOnly,
-    pvpEnabled,
-    pvpLeague,
-    pvpCategory,
-    bestTeamsEnabled,
-  ]);
 
   // Poll progress during upload (only used on the /dex "empty" state)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -702,6 +600,21 @@ const DexViewer: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadFileData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fileId,
+    debouncedSearch,
+    orderBy,
+    orderDir,
+    uniqueOnly,
+    pvpEnabled,
+    pvpLeague,
+    pvpCategory,
+    bestTeamsEnabled,
+  ]);
 
   const getFileDisplayName = useCallback((file: UserFile) => {
     let displayName = file.filename.replace(".json", "");
@@ -2544,143 +2457,6 @@ const DexViewer: React.FC = () => {
                       }}
                     >
                       {(() => {
-                        const symbol = pokemonDetails.pokemon?.gender_symbol;
-                        if (!symbol || symbol === "⚲") return null;
-                        if (!Number.isFinite(detailHpTrackCenterY as any))
-                          return null;
-
-                        return (
-                          <div
-                            className="pokemon-detail-back-gender"
-                            style={{
-                              top: detailHpTrackCenterY ?? undefined,
-                            }}
-                          >
-                            {symbol}
-                          </div>
-                        );
-                      })()}
-
-                      {(() => {
-                        if (!Number.isFinite(detailAfterHpTop as any))
-                          return null;
-
-                        const rawWeight = Number(
-                          pokemonDetails.pokemon?.weight_kg ??
-                            pokemonDetails.pokemon?.weightKg ??
-                            pokemonDetails.pokemon?.weight
-                        );
-                        const rawHeight = Number(
-                          pokemonDetails.pokemon?.height_m ??
-                            pokemonDetails.pokemon?.heightM ??
-                            pokemonDetails.pokemon?.height
-                        );
-
-                        const formatValue = (v: number, unit: string) => {
-                          if (!Number.isFinite(v)) return "—";
-                          const fixed = Math.abs(v - Math.round(v)) < 1e-6;
-                          const s = fixed
-                            ? String(Math.round(v))
-                            : v.toFixed(1);
-                          return `${s}${unit}`;
-                        };
-
-                        const typesRaw: any[] = Array.isArray(
-                          pokemonDetails.pokemon?.types
-                        )
-                          ? pokemonDetails.pokemon.types
-                          : [];
-                        const types = Array.from(
-                          new Set(
-                            typesRaw
-                              .map((t) => String(t || "").trim())
-                              .filter(Boolean)
-                              .map((t) => t.toUpperCase())
-                          )
-                        );
-
-                        return (
-                          <div
-                            className="pokemon-detail-back-info-row"
-                            style={{ top: detailAfterHpTop ?? undefined }}
-                            ref={detailInfoRowRef}
-                          >
-                            <div className="pokemon-detail-back-info-block">
-                              <div className="pokemon-detail-back-info-value">
-                                {formatValue(rawWeight, "KG")}
-                              </div>
-                              <div className="pokemon-detail-back-info-label">
-                                Weight
-                              </div>
-                            </div>
-
-                            <div className="pokemon-detail-back-info-sep" />
-
-                            <div className="pokemon-detail-back-info-block">
-                              <div className="pokemon-detail-back-types">
-                                {types.map((t) => (
-                                  <img
-                                    key={t}
-                                    className="pokemon-detail-back-type-icon"
-                                    src={`/img/types/POKEMON_TYPE_${t}.png`}
-                                    alt={t}
-                                  />
-                                ))}
-                              </div>
-                              <div className="pokemon-detail-back-info-label">
-                                {types.length ? types.join(" / ") : "—"}
-                              </div>
-                            </div>
-
-                            <div className="pokemon-detail-back-info-sep" />
-
-                            <div className="pokemon-detail-back-info-block">
-                              <div className="pokemon-detail-back-info-value">
-                                {formatValue(rawHeight, "M")}
-                              </div>
-                              <div className="pokemon-detail-back-info-label">
-                                Height
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {(() => {
-                        if (!Number.isFinite(detailAfterInfoTop as any))
-                          return null;
-
-                        const isDynamax = Boolean(
-                          pokemonDetails.pokemon?.dynamax
-                        );
-                        const isGigantamax = Boolean(
-                          pokemonDetails.pokemon?.gigantamax
-                        );
-                        if (!isDynamax && !isGigantamax) return null;
-
-                        const parts: string[] = [];
-                        if (isGigantamax) parts.push("Gigantamax");
-                        else if (isDynamax) parts.push("Dynamax");
-
-                        return (
-                          <div
-                            className="pokemon-detail-back-max-row"
-                            style={{ top: detailAfterInfoTop ?? undefined }}
-                            ref={detailMaxRowRef}
-                          >
-                            <img
-                              className="pokemon-detail-back-max-icon"
-                              src="/img/icons/dynamax.png"
-                              alt="dynamax"
-                            />
-                            <div className="pokemon-detail-back-max-text">
-                              {parts.join(" / ")}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {(() => {
                         const cp = Number(pokemonDetails.pokemon?.cp);
                         const maxCp = calcMaxCp(pokemonDetails.pokemon);
                         const ratio =
@@ -2745,22 +2521,63 @@ const DexViewer: React.FC = () => {
                         className="pokemon-detail-back-panel"
                         style={{ top: DETAILS_PANEL_TOP_PX }}
                       >
-                        <div
-                          className={
-                            pokemonDetails.pokemon?.gigantamax
-                              ? "pokemon-detail-back-pokemon-block is-gigantamax"
-                              : "pokemon-detail-back-pokemon-block"
-                          }
-                        >
-                          <img
-                            className="pokemon-detail-back-pokemon"
-                            src={
-                              pokemonDetails.pokemon?.image
-                                ? `/${pokemonDetails.pokemon.image}`
-                                : "/img/placeholder.png"
-                            }
-                            alt={pokemonDetails.pokemon?.name || "pokemon"}
-                          />
+                        <div className="pokemon-detail-back-panel-inner">
+                          {(() => {
+                            const staticSrc = pokemonDetails.pokemon?.image
+                              ? `/${pokemonDetails.pokemon.image}`
+                              : "/img/placeholder.png";
+
+                            const animatedName = String(
+                              pokemonDetails.pokemon?.image_animated || ""
+                            ).trim();
+                            const animatedSrc = animatedName
+                              ? `https://s3.us-west-004.backblazeb2.com/pokedeiz/animated/${animatedName}`
+                              : "";
+
+                            const isGigantamax = Boolean(
+                              pokemonDetails.pokemon?.gigantamax
+                            );
+                            const className = isGigantamax
+                              ? "pokemon-detail-back-sprite is-gigantamax"
+                              : "pokemon-detail-back-sprite";
+
+                            const is3d = Boolean(animatedSrc);
+
+                            const imgEl = (
+                              <img
+                                className={className}
+                                src={animatedSrc || staticSrc}
+                                alt={pokemonDetails.pokemon?.name || "pokemon"}
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.dataset.fallbackDone === "1") return;
+                                  img.dataset.fallbackDone = "1";
+                                  img.src = staticSrc;
+                                }}
+                              />
+                            );
+
+                            const spriteContent = is3d ? (
+                              <div
+                                className={
+                                  isGigantamax
+                                    ? "pokemon-detail-back-sprite-holder is-gigantamax"
+                                    : "pokemon-detail-back-sprite-holder"
+                                }
+                              >
+                                {imgEl}
+                              </div>
+                            ) : (
+                              imgEl
+                            );
+
+                            return (
+                              <div className="pokemon-detail-back-sprite-zone">
+                                {spriteContent}
+                              </div>
+                            );
+                          })()}
+
                           <div className="pokemon-detail-back-name">
                             {toTitleCaseName(pokemonDetails.pokemon?.name)}
                           </div>
@@ -2786,10 +2603,16 @@ const DexViewer: React.FC = () => {
                                 ? clamp01(current / max)
                                 : 0;
 
+                            const symbol = String(
+                              pokemonDetails.pokemon?.gender_symbol || ""
+                            );
+                            const showGender = Boolean(
+                              symbol && symbol !== "⚲"
+                            );
+
                             return (
                               <div
                                 className="pokemon-detail-back-stamina"
-                                ref={detailStaminaWrapRef}
                                 title={
                                   Number.isFinite(current) &&
                                   Number.isFinite(max) &&
@@ -2803,15 +2626,21 @@ const DexViewer: React.FC = () => {
                                     LUCKY POKÉMON
                                   </div>
                                 ) : null}
-                                <div
-                                  className="pokemon-detail-back-stamina-track"
-                                  ref={detailHpTrackRef}
-                                >
-                                  <div
-                                    className="pokemon-detail-back-stamina-fill"
-                                    style={{ width: `${ratio * 100}%` }}
-                                  />
+
+                                <div className="pokemon-detail-back-hp-row">
+                                  <div className="pokemon-detail-back-stamina-track">
+                                    <div
+                                      className="pokemon-detail-back-stamina-fill"
+                                      style={{ width: `${ratio * 100}%` }}
+                                    />
+                                  </div>
+                                  {showGender ? (
+                                    <div className="pokemon-detail-back-gender">
+                                      {symbol}
+                                    </div>
+                                  ) : null}
                                 </div>
+
                                 {Number.isFinite(current) &&
                                 Number.isFinite(max) &&
                                 max > 0 ? (
@@ -2819,6 +2648,111 @@ const DexViewer: React.FC = () => {
                                     {current}/{max} HP
                                   </div>
                                 ) : null}
+                              </div>
+                            );
+                          })()}
+
+                          {(() => {
+                            const rawWeight = Number(
+                              pokemonDetails.pokemon?.weight_kg ??
+                                pokemonDetails.pokemon?.weightKg ??
+                                pokemonDetails.pokemon?.weight
+                            );
+                            const rawHeight = Number(
+                              pokemonDetails.pokemon?.height_m ??
+                                pokemonDetails.pokemon?.heightM ??
+                                pokemonDetails.pokemon?.height
+                            );
+
+                            const formatValue = (v: number, unit: string) => {
+                              if (!Number.isFinite(v)) return "—";
+                              const fixed = Math.abs(v - Math.round(v)) < 1e-6;
+                              const s = fixed
+                                ? String(Math.round(v))
+                                : v.toFixed(1);
+                              return `${s}${unit}`;
+                            };
+
+                            const typesRaw: any[] = Array.isArray(
+                              pokemonDetails.pokemon?.types
+                            )
+                              ? pokemonDetails.pokemon.types
+                              : [];
+                            const types = Array.from(
+                              new Set(
+                                typesRaw
+                                  .map((t) => String(t || "").trim())
+                                  .filter(Boolean)
+                                  .map((t) => t.toUpperCase())
+                              )
+                            );
+
+                            return (
+                              <div className="pokemon-detail-back-info-row">
+                                <div className="pokemon-detail-back-info-block">
+                                  <div className="pokemon-detail-back-info-value">
+                                    {formatValue(rawWeight, "KG")}
+                                  </div>
+                                  <div className="pokemon-detail-back-info-label">
+                                    Weight
+                                  </div>
+                                </div>
+
+                                <div className="pokemon-detail-back-info-sep" />
+
+                                <div className="pokemon-detail-back-info-block">
+                                  <div className="pokemon-detail-back-types">
+                                    {types.map((t) => (
+                                      <img
+                                        key={t}
+                                        className="pokemon-detail-back-type-icon"
+                                        src={`/img/types/POKEMON_TYPE_${t}.png`}
+                                        alt={t}
+                                      />
+                                    ))}
+                                  </div>
+                                  <div className="pokemon-detail-back-info-label">
+                                    {types.length ? types.join(" / ") : "—"}
+                                  </div>
+                                </div>
+
+                                <div className="pokemon-detail-back-info-sep" />
+
+                                <div className="pokemon-detail-back-info-block">
+                                  <div className="pokemon-detail-back-info-value">
+                                    {formatValue(rawHeight, "M")}
+                                  </div>
+                                  <div className="pokemon-detail-back-info-label">
+                                    Height
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {(() => {
+                            const isDynamax = Boolean(
+                              pokemonDetails.pokemon?.dynamax
+                            );
+                            const isGigantamax = Boolean(
+                              pokemonDetails.pokemon?.gigantamax
+                            );
+                            if (!isDynamax && !isGigantamax) return null;
+
+                            const parts: string[] = [];
+                            if (isGigantamax) parts.push("Gigantamax");
+                            else if (isDynamax) parts.push("Dynamax");
+
+                            return (
+                              <div className="pokemon-detail-back-max-row">
+                                <img
+                                  className="pokemon-detail-back-max-icon"
+                                  src="/img/icons/dynamax.png"
+                                  alt="dynamax"
+                                />
+                                <div className="pokemon-detail-back-max-text">
+                                  {parts.join(" / ")}
+                                </div>
                               </div>
                             );
                           })()}
