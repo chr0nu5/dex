@@ -2527,13 +2527,6 @@ const DexViewer: React.FC = () => {
                               ? `/${pokemonDetails.pokemon.image}`
                               : "/img/placeholder.png";
 
-                            const animatedName = String(
-                              pokemonDetails.pokemon?.image_animated || ""
-                            ).trim();
-                            const animatedSrc = animatedName
-                              ? `https://s3.us-west-004.backblazeb2.com/pokedeiz/animated/${animatedName}`
-                              : "";
-
                             const isGigantamax = Boolean(
                               pokemonDetails.pokemon?.gigantamax
                             );
@@ -2541,12 +2534,10 @@ const DexViewer: React.FC = () => {
                               ? "pokemon-detail-back-sprite is-gigantamax"
                               : "pokemon-detail-back-sprite";
 
-                            const is3d = Boolean(animatedSrc);
-
                             const imgEl = (
                               <img
                                 className={className}
-                                src={animatedSrc || staticSrc}
+                                src={staticSrc}
                                 alt={pokemonDetails.pokemon?.name || "pokemon"}
                                 onError={(e) => {
                                   const img = e.currentTarget;
@@ -2557,23 +2548,9 @@ const DexViewer: React.FC = () => {
                               />
                             );
 
-                            const spriteContent = is3d ? (
-                              <div
-                                className={
-                                  isGigantamax
-                                    ? "pokemon-detail-back-sprite-holder is-gigantamax"
-                                    : "pokemon-detail-back-sprite-holder"
-                                }
-                              >
-                                {imgEl}
-                              </div>
-                            ) : (
-                              imgEl
-                            );
-
                             return (
                               <div className="pokemon-detail-back-sprite-zone">
-                                {spriteContent}
+                                {imgEl}
                               </div>
                             );
                           })()}

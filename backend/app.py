@@ -1436,6 +1436,11 @@ def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
     is_shiny = bool(display.get("isShiny"))
     is_lucky = bool(rec.get("isLucky"))
 
+    # Shadow / Purified (SpeedUnlocker exports these explicitly)
+    is_shadow = bool(rec.get("isShadow"))
+    is_purified = bool(rec.get("isPurified"))
+    alignment = "SHADOW" if is_shadow else ("PURIFIED" if is_purified else "")
+
     moves = rec.get("moves") if isinstance(rec.get("moves"), dict) else {}
     fast_raw = _strip_known_prefix(str(moves.get("fast") or ""), ["HoloPokemonMove_"])
     charged_raw = _strip_known_prefix(
@@ -1461,6 +1466,7 @@ def _speedunlocker_to_legacy_payload(rec: dict) -> dict:
         "height": rec.get("heightM", 0),
         "weight": rec.get("weightKg", 0),
         "gender": known_gender or "",
+        "alignment": alignment,
         "isshiny": "YES" if is_shiny else "NO",
         "islucky": "YES" if is_lucky else "NO",
         "move_1": fast_token,
@@ -2422,6 +2428,15 @@ def apply_search_filter(pokemon_list, search_query):
     for pokemon in pokemon_list:
         match = False
 
+        def _truthy(v) -> bool:
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, (int, float)):
+                return v != 0
+            if isinstance(v, str):
+                return v.strip().lower() in {"1", "true", "yes", "y"}
+            return False
+
         def _is_gigantamax(p: dict) -> bool:
             if not isinstance(p, dict):
                 return False
@@ -2526,10 +2541,10 @@ def apply_search_filter(pokemon_list, search_query):
 
         # Keywords: shiny, shadow, purified, lucky, legendary, mythical
         elif search_query in ["shiny", "shadow", "purified", "lucky"]:
-            match = pokemon.get(search_query, False) == True
+            match = _truthy(pokemon.get(search_query, False))
 
         elif search_query in ["legendary", "mythical"]:
-            match = pokemon.get(search_query, False) == True
+            match = _truthy(pokemon.get(search_query, False))
 
         # Gender: male, female, genderunknown
         elif search_query in ["male", "female"]:
@@ -2984,6 +2999,19 @@ def get_file_data(user_id, file_id):
             data = json.load(f)
 
         print(f"[DEBUG] Loaded {len(data)} pokemon from {enriched_path}")
+
+        # Backfill shadow/purified flags from SpeedUnlocker records when present.
+        # Some enriched files were generated before we mapped isShadow/isPurified into our canonical fields.
+        for p in data if isinstance(data, list) else []:
+            if not isinstance(p, dict):
+                continue
+            src = p.get("source")
+            if not isinstance(src, dict):
+                continue
+            if p.get("shadow") is not True and src.get("isShadow") is True:
+                p["shadow"] = True
+            if p.get("purified") is not True and src.get("isPurified") is True:
+                p["purified"] = True
 
         # Get query parameters for filtering and sorting
         search = request.args.get("search", "").lower()
