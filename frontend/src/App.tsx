@@ -4,6 +4,7 @@ import { ConfigProvider } from "antd";
 import Home from "./pages/Home";
 import GeneratorPage from "./pages/GeneratorPage";
 import DexViewer from "./pages/DexViewer";
+import Render3DPage from "./pages/Render3DPage";
 import LoadingOverlay from "./components/LoadingOverlay";
 import "./App.css";
 
@@ -25,6 +26,7 @@ const App: React.FC = () => {
             <Route path="/dex" element={<DexViewer />} />
             <Route path="/dex/:fileId" element={<DexViewer />} />
             <Route path="/generator" element={<GeneratorPage />} />
+            <Route path="/render/3d/:id" element={<Render3DPage />} />
           </Routes>
         </div>
       </Router>

@@ -532,7 +532,7 @@ select.liquid-glass-select option {
   position: absolute;
   left: 50%;
   top: 10px;
-  transform: translate(-50%, -90%);
+  transform: translate(-50%, -90%); /* 65% for 3d elements */
   z-index: 2;
   pointer-events: none;
 }
@@ -570,6 +570,19 @@ select.liquid-glass-select option {
   transform: translateX(-50%);
   max-width: 60%;
   max-height: 60%;
+}
+
+.pokemon-detail-back-3d-holder {
+  width: 256px;
+  height: 256px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.pokemon-detail-back-3d-holder canvas {
+  display: block;
 }
 
 .pokemon-detail-back-name {

@@ -1816,6 +1816,122 @@ def health():
     return jsonify({"status": "ok", "message": "API is running"})
 
 
+def _find_frontend_3d_root() -> Path | None:
+    """Locate the 3D assets folder.
+
+    In dev, assets live in ../frontend/public/3d.
+    In prod (Docker), CRA build copies public/3d into the build folder.
+    """
+
+    candidates: list[Path] = []
+
+    # 1) If we are serving a CRA build via Flask, try build/3d first.
+    try:
+        if app.static_folder:
+            candidates.append(Path(app.static_folder) / "3d")
+    except Exception:
+        pass
+
+    # 2) Dev fallback: frontend/public/3d (repo layout)
+    try:
+        candidates.append(
+            (Path(__file__).resolve().parent.parent / "frontend" / "public" / "3d")
+        )
+        candidates.append(
+            (
+                Path(__file__).resolve().parent / ".." / "frontend" / "public" / "3d"
+            ).resolve()
+        )
+    except Exception:
+        pass
+
+    for p in candidates:
+        try:
+            if p.exists() and p.is_dir():
+                return p
+        except Exception:
+            continue
+    return None
+
+
+def _pick_first_png(rig_dir: Path, patterns: list[str]) -> str | None:
+    for pat in patterns:
+        hits = sorted(rig_dir.glob(pat))
+        if hits:
+            return hits[0].name
+    return None
+
+
+@app.route("/api/render/3d/<int:pokemon_id>", methods=["GET"])
+def render_3d_config(pokemon_id: int):
+    """Return the FBX + textureMap for a given pokedex id.
+
+    The frontend viewer will load assets directly from /3d/... served by CRA (dev)
+    or by the Flask static build (prod).
+    """
+
+    root = _find_frontend_3d_root()
+    if not root:
+        return jsonify({"error": "3d assets root not found"}), 404
+
+    pm = f"pm{pokemon_id:04d}"
+    species_dir = root / pm
+    if not species_dir.exists() or not species_dir.is_dir():
+        return jsonify({"error": f"species folder not found: {pm}"}), 404
+
+    preferred_rig = f"{pm}_00_Rig"
+    rig_dir = species_dir / preferred_rig
+    if not rig_dir.exists() or not rig_dir.is_dir():
+        # Some exports contain multiple rig folders like "pmXXXX_00_Rig #...".
+        candidates = sorted(
+            [
+                p
+                for p in species_dir.iterdir()
+                if p.is_dir() and p.name.startswith(preferred_rig)
+            ]
+        )
+        rig_dir = None
+        for c in candidates:
+            if any(c.glob("*.fbx")):
+                rig_dir = c
+                break
+        if rig_dir is None:
+            return jsonify({"error": f"rig folder not found for: {pm}"}), 404
+
+    fbx_files = sorted(rig_dir.glob("*.fbx"))
+    if not fbx_files:
+        return jsonify({"error": f"fbx not found in: {rig_dir.name}"}), 404
+
+    # Heuristics based on the provided pm0001 folder naming.
+    body_png = _pick_first_png(
+        rig_dir, ["*_BodyAll*.png", "*BodyAll*.png", "*_Body*.png", "*Body*.png"]
+    )
+    eye_png = _pick_first_png(
+        rig_dir, ["*_Eye1*.png", "*Eye1*.png", "*_Eye*.png", "*Eye*.png"]
+    )
+
+    texture_map: dict[str, str] = {}
+    if body_png:
+        texture_map["Body_SHINY"] = body_png
+    if eye_png:
+        texture_map["Eye"] = eye_png
+        texture_map["Eye1"] = eye_png
+        texture_map["Eye_MATERIAL"] = eye_png
+
+    base_url = f"/3d/{pm}/{rig_dir.name}/"
+
+    return jsonify(
+        {
+            "pokemonId": pokemon_id,
+            "pm": pm,
+            "rigFolder": rig_dir.name,
+            "baseUrl": base_url,
+            "fbx": fbx_files[0].name,
+            "textureMap": texture_map,
+        }
+    )
+
+
 @app.route("/api/upload", methods=["POST"])
 def upload_json():
     """Upload and enrich a Pokemon JSON file"""

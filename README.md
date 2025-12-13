@@ -32,7 +32,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-O backend estará disponível em `http://localhost:5000` com:
+O backend estará disponível em `http://localhost:5001` com:
 
 - ✅ Hot reload habilitado
 - ✅ CORS habilitado para desenvolvimento
@@ -58,7 +58,7 @@ O frontend estará disponível em `http://localhost:3000`
 - ✅ React 18 + TypeScript 5.7
 - ✅ Ant Design 5.22 (componentes e ícones)
 - ✅ @reactbits/effect (para efeitos visuais)
-- ✅ Proxy configurado para `/api` → `http://localhost:5000`
+- ✅ Proxy configurado para `/api` → `http://localhost:5001`
 
 ## 🐳 Produção (com Docker)
 
