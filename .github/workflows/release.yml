@@ -49,4 +49,4 @@ jobs:
 
       - name: Deploy to Portainer
         run: |
-          curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/1c55f470-df5c-4893-a669-e96425027b63
+          curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/7efc4d04-5bec-4f51-b294-1af12f18bcf6
