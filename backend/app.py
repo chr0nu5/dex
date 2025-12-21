@@ -2649,6 +2649,11 @@ def filter_unique_pokemon(pokemon_list):
         costume_raw = pokemon.get("costume")
         costume_key = "" if costume_raw is None else str(costume_raw)
 
+        # Include form in uniqueness. Different forms (e.g., Alolan/Galar/variants)
+        # should be considered unique even for the same Dex number/costume.
+        form_raw = pokemon.get("form")
+        form_key = "" if form_raw is None else str(form_raw)
+
         # Determine the special characteristics
         is_shiny = pokemon.get("shiny", False)
         is_shadow = pokemon.get("shadow", False)
@@ -2659,15 +2664,15 @@ def filter_unique_pokemon(pokemon_list):
         # Create a key based on species and special characteristics
         # Priority: apex > shiny > shadow > purified > normal
         if is_apex:
-            key = (number, costume_key, "apex", is_lucky)
+            key = (number, costume_key, form_key, "apex", is_lucky)
         elif is_shiny:
-            key = (number, costume_key, "shiny", is_lucky)
+            key = (number, costume_key, form_key, "shiny", is_lucky)
         elif is_shadow:
-            key = (number, costume_key, "shadow", is_lucky)
+            key = (number, costume_key, form_key, "shadow", is_lucky)
         elif is_purified:
-            key = (number, costume_key, "purified", is_lucky)
+            key = (number, costume_key, form_key, "purified", is_lucky)
         else:
-            key = (number, costume_key, "normal", is_lucky)
+            key = (number, costume_key, form_key, "normal", is_lucky)
 
         # Keep the pokemon with the largest size (XXL > XL > normal > XS > XXS)
         size_priority = {
