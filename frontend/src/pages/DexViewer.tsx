@@ -1424,8 +1424,18 @@ const DexViewer: React.FC = () => {
                             {pokemon.gender_symbol}
                           </span>
                         )}
-                      {pokemon.name}
+                      {pokemon.name} #{pokemon.number}
                     </Tag>
+                  </div>
+
+                  {/* CP and Size Tags */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      justifyContent: "center",
+                    }}
+                  >
                     <Tag
                       style={{
                         margin: 0,
@@ -1462,16 +1472,6 @@ const DexViewer: React.FC = () => {
                     >
                       {pokemon.iv.toFixed(1)}%
                     </Tag>
-                  </div>
-
-                  {/* CP and Size Tags */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      justifyContent: "center",
-                    }}
-                  >
                     <Tag
                       style={{
                         margin: 0,

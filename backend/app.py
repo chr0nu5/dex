@@ -2644,6 +2644,11 @@ def filter_unique_pokemon(pokemon_list):
         if number is None:
             continue
 
+        # Include costume in uniqueness. Costumed variants should not be dropped
+        # when unique mode is enabled, but should still deduplicate within the same costume.
+        costume_raw = pokemon.get("costume")
+        costume_key = "" if costume_raw is None else str(costume_raw)
+
         # Determine the special characteristics
         is_shiny = pokemon.get("shiny", False)
         is_shadow = pokemon.get("shadow", False)
@@ -2654,15 +2659,15 @@ def filter_unique_pokemon(pokemon_list):
         # Create a key based on species and special characteristics
         # Priority: apex > shiny > shadow > purified > normal
         if is_apex:
-            key = (number, "apex", is_lucky)
+            key = (number, costume_key, "apex", is_lucky)
         elif is_shiny:
-            key = (number, "shiny", is_lucky)
+            key = (number, costume_key, "shiny", is_lucky)
         elif is_shadow:
-            key = (number, "shadow", is_lucky)
+            key = (number, costume_key, "shadow", is_lucky)
         elif is_purified:
-            key = (number, "purified", is_lucky)
+            key = (number, costume_key, "purified", is_lucky)
         else:
-            key = (number, "normal", is_lucky)
+            key = (number, costume_key, "normal", is_lucky)
 
         # Keep the pokemon with the largest size (XXL > XL > normal > XS > XXS)
         size_priority = {
