@@ -50,3 +50,53 @@ jobs:
       - name: Deploy to Portainer
         run: |
           curl -X POST https://docker-threadripper.john.dev.br/api/webhooks/7efc4d04-5bec-4f51-b294-1af12f18bcf6
+
+      - name: 📣 Notify Telegram (Pokédex updated)
+        env:
+          BOT_TOKEN: "8302607422:AAHiqO5WUYCfGUUWJDoA3eeD-yLVlJqud7Y"
+          CHAT_ID: "-1003319552798"
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BOT_TOKEN:-}" ] || [ -z "${CHAT_ID:-}" ]; then
+            echo "Missing TELEGRAM_BOT_TOKEN and/or TELEGRAM_CHAT_ID secrets"
+            exit 1
+          fi
+
+          # Determine commit range since the last build.
+          # This repo doesn't produce a "build artifact commit" in git, so we fall back
+          # to a short recent changelog when we can't infer a range.
+          PREV_BUILD_COMMIT=""
+          if git rev-parse --git-dir >/dev/null 2>&1; then
+            PREV_BUILD_COMMIT=$(git log -n 2 --format=%H -- .github/workflows/release.yml 2>/dev/null | tail -n 1 || true)
+          fi
+
+          RANGE=""
+          if [ -n "$PREV_BUILD_COMMIT" ] && [ "$PREV_BUILD_COMMIT" != "$(git rev-parse HEAD)" ]; then
+            RANGE="$PREV_BUILD_COMMIT..HEAD"
+          fi
+
+          # Build a human-friendly changelog from commit subjects (limit to Telegram 4096 chars).
+          if [ -n "$RANGE" ]; then
+            COMMITS=$(git log --no-merges --pretty=format:'%s' "$RANGE" | head -n 12)
+          else
+            COMMITS=$(git log --no-merges -n 8 --pretty=format:'%s')
+          fi
+
+          # Convert to bullets and lightly clean up common prefixes.
+          COMMITS=$(printf "%s\n" "$COMMITS" \
+            | sed -E 's/^[[:space:]]+//; s/^[-*]+[[:space:]]*//; s/^chore\([^)]*\):[[:space:]]*//I; s/^chore:[[:space:]]*//I; s/^fix:[[:space:]]*//I; s/^feat:[[:space:]]*//I; s/^refactor:[[:space:]]*//I' \
+            | awk 'NF{print "• " $0}' \
+            | head -n 12)
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- (no commits found)"
+          fi
+
+          TEXT=$(printf "✅ Pokédex updated!\n\n📝 Changes:\n\n%s\n\n🔗 Link:\n\nhttps://dex.john.dev.br\n" \
+            "$COMMITS")
+
+          curl -sS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            > /dev/null
